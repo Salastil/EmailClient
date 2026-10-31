@@ -96,17 +96,24 @@
 </Dialog>
 
 <style>
-  .fields { display: flex; flex-direction: column; }
-  .row { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--md-sys-color-outline-variant); min-height: 40px; }
+  .fields { display: flex; flex-direction: column; gap: 8px; }
+  .row { display: flex; align-items: center; gap: 12px; }
   .row > span { width: 60px; flex: none; font-size: 13px; color: var(--md-sys-color-on-surface-variant); }
-  .row input, .row select { flex: 1; height: 38px; border: 0; outline: 0; background: none; }
+  /* Filled like the body below, so each field stands out from the dialog. */
+  .row input, .row select {
+    flex: 1; min-width: 0; height: 38px; padding: 0 12px; outline: 0;
+    border: 1px solid transparent; border-radius: var(--md-sys-shape-corner-small);
+    background: var(--md-sys-color-surface-container);
+  }
+  .row input:focus, .row select:focus { border-color: var(--md-sys-color-primary); }
   .row select option { background: var(--md-sys-color-surface-container-high); }
   .tiny { font-size: 12px; color: var(--md-sys-color-primary); }
   textarea {
-    margin-top: 12px; resize: vertical; border: 0; outline: 0; min-height: 240px;
+    margin-top: 4px; resize: vertical; border: 1px solid transparent; outline: 0; min-height: 240px;
     background: var(--md-sys-color-surface-container); border-radius: var(--md-sys-shape-corner-medium); padding: 12px;
     font: 14px/1.5 var(--font);
   }
+  textarea:focus { border-color: var(--md-sys-color-primary); }
   .atts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
   .att { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-surface-container-highest); font-size: 13px; }
   .error { display: flex; gap: 8px; color: #ffb4ab; font-size: 13px; margin: 10px 0 0; }

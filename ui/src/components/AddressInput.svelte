@@ -57,7 +57,12 @@
 
 <style>
   .wrap { position: relative; flex: 1; }
-  input { width: 100%; height: 38px; border: 0; outline: 0; background: none; }
+  input {
+    width: 100%; height: 38px; padding: 0 12px; outline: 0;
+    border: 1px solid transparent; border-radius: var(--md-sys-shape-corner-small);
+    background: var(--md-sys-color-surface-container);
+  }
+  input:focus { border-color: var(--md-sys-color-primary); }
   .menu {
     position: absolute; z-index: 5; top: 100%; left: 0; right: 0; padding: 4px;
     background: var(--md-sys-color-surface-container-highest); border-radius: var(--md-sys-shape-corner-small);
