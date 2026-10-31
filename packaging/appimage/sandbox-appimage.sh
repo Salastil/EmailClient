@@ -21,5 +21,12 @@ root="$work/squashfs-root"
 mv "$root/AppRun" "$root/AppRun.unsandboxed"
 install -m 0755 "$here/AppRun" "$root/AppRun"
 
+# appimagetool insists that everything is readable by all users; some files
+# come out of the build as 0700. `X` only adds execute to directories and to
+# files that are already executable.
+chmod 0755 "$root"
+chmod -R a+rX "$root"
+chmod 0755 "$root/AppRun" "$root/AppRun.unsandboxed"
+
 ARCH="${ARCH:-$(uname -m)}" "$tool" --no-appstream "$root" "$out"
 echo "wrote $out"
