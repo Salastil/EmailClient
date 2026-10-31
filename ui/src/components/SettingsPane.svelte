@@ -62,11 +62,6 @@
     { key: 'fastmail', name: 'Fastmail', secret: false },
   ];
 
-  function oauthClient(key: string) {
-    s.oauth_clients[key] ??= { client_id: '', client_secret: null };
-    return s.oauth_clients[key];
-  }
-
   const security = (x: string) => ({ tls: 'SSL/TLS', starttls: 'STARTTLS', none: 'none' })[x] ?? x;
 
   type Section = 'accounts' | 'notifications' | 'tray' | 'privacy' | 'advanced' | 'about';
@@ -82,6 +77,9 @@
   // Edited locally and pushed up on each change.
   // svelte-ignore state_referenced_locally
   let s = $state(structuredClone($state.snapshot(settings)) as Settings);
+  // Fill in a row per provider here: the template may only read state, and
+  // writing a missing entry while rendering blanked the Advanced section.
+  for (const p of OAUTH_PROVIDERS) s.oauth_clients[p.key] ??= { client_id: '', client_secret: null };
   let vipInput = $state('');
   let rule = $state<{ field: RuleField; contains: string }>({ field: 'sender', contains: '' });
   let testResult = $state<Record<string, string>>({});
@@ -310,7 +308,7 @@
       <p class="hint">Browser sign-in needs an OAuth client registered with each provider. Builds may include one; enter your own here to override it (for Google, create a “Desktop app” client in Google Cloud Console).</p>
       <div class="card">
         {#each OAUTH_PROVIDERS as p}
-          {@const c = oauthClient(p.key)}
+          {@const c = s.oauth_clients[p.key]}
           <div class="oauth-row">
             <b>{p.name}</b>
             <input class="text grow-input" placeholder="Client ID" bind:value={c.client_id} onchange={commit} />
