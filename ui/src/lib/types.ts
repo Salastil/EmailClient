@@ -171,9 +171,20 @@ export interface ComposeInit {
   reply_to_id?: string | null;
   forward_id?: string | null;
   forwarded_attachments?: string[];
+  /** Started from "Edit as new message": forward_id only carries the attachments over. */
+  edit_as_new?: boolean;
 }
 
 export type MessageAction = 'reply' | 'reply_all' | 'forward' | 'archive' | 'delete' | 'toggle_read' | 'toggle_star';
+
+/** Actions in the message list's right-click menu. */
+export type MessageMenuAction =
+  | MessageAction
+  | 'open'
+  | 'edit_as_new'
+  | 'junk'
+  | 'thread_read'
+  | 'save';
 
 export type SourceKind = 'calendar' | 'address_book';
 export type Backend = 'local' | 'dav' | 'dav_o_auth' | 'graph';

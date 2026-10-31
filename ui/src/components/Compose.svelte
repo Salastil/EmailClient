@@ -55,7 +55,7 @@
 
 <svelte:window onkeydown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') send(); }} />
 
-<Dialog title={init.reply_to_id ? 'Reply' : init.forward_id ? 'Forward' : 'New message'} {onclose} width={760}>
+<Dialog title={init.reply_to_id ? 'Reply' : init.forward_id && !init.edit_as_new ? 'Forward' : 'New message'} {onclose} width={760}>
   <div class="fields">
     <label class="row"><span>From</span>
       <select bind:value={f.account_id}>

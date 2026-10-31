@@ -13,6 +13,7 @@
     ontoggle,
     onstar,
     onread,
+    onmenu,
   }: {
     message: MessageSummary;
     selected: boolean;
@@ -23,6 +24,7 @@
     ontoggle?: () => void;
     onstar: () => void;
     onread: () => void;
+    onmenu?: (e: MouseEvent) => void;
   } = $props();
 </script>
 
@@ -37,6 +39,7 @@
   tabindex="-1"
   onclick={onselect}
   onkeydown={(e) => e.key === 'Enter' && onselect()}
+  oncontextmenu={(e) => { if (onmenu) { e.preventDefault(); e.stopPropagation(); onmenu(e); } }}
 >
   <div class="top">
     {#if message.unread}<span class="dot" aria-label="Unread"></span>{/if}

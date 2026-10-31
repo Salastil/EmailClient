@@ -111,3 +111,25 @@ async fn create_rename_move_copy_mark_read_and_delete() {
     let left = paths(&mut s).await;
     assert!(!left.iter().any(|p| p.starts_with(&trashed) || *p == copy || *p == empty), "{left:?}");
 }
+
+#[tokio::test]
+async fn copy_a_message_and_keep_the_original() {
+    let Some(server) = server() else {
+        eprintln!("MOHO_TEST_IMAP not set; skipping");
+        return;
+    };
+    let mut s = imap::connect(&server, &creds()).await.unwrap();
+    let delim = imap::delimiter(&mut s).await.unwrap();
+    let dest = imap::child_path(None, "Copies", &delim).unwrap();
+    let _ = imap::delete_folder(&mut s, &dest).await;
+    imap::create_folder(&mut s, &dest).await.unwrap();
+    imap::append(&mut s, "INBOX", "()", &mail("copy-me@x", "Copy me")).await.unwrap();
+    let uid = *imap::server_uids(&mut s, "INBOX").await.unwrap().iter().max().unwrap();
+
+    imap::copy_message(&mut s, "INBOX", uid, &dest).await.unwrap();
+    assert_eq!(imap::server_uids(&mut s, &dest).await.unwrap().len(), 1);
+    assert!(imap::server_uids(&mut s, "INBOX").await.unwrap().contains(&uid));
+
+    imap::expunge_message(&mut s, "INBOX", uid).await.unwrap();
+    imap::delete_folder(&mut s, &dest).await.unwrap();
+}

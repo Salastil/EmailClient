@@ -272,6 +272,62 @@ pub async fn delete_message(id: String, engine: State<'_, SharedEngine>, app: Ap
     Ok(())
 }
 
+/// Move a message to the account's Spam folder.
+#[tauri::command]
+pub async fn junk_message(id: String, engine: State<'_, SharedEngine>, app: AppHandle) -> CmdResult<()> {
+    let id = msg_id(&id)?;
+    let loc = engine.store.lock().unwrap().location(id).map_err(err)?.ok_or("message not found")?;
+    let spam = folder_path_by_role(&engine, &loc.account_id, FolderRole::Spam)?.ok_or("this account has no Spam folder")?;
+    if spam == loc.folder_path {
+        return Ok(());
+    }
+    move_inner(&engine, id, Some(spam)).await?;
+    let _ = app.emit("mail-changed", ());
+    refresh_tray(&app);
+    Ok(())
+}
+
+/// Put a copy of a message in another folder of the same account.
+#[tauri::command]
+pub async fn copy_message(id: String, folder_id: String, engine: State<'_, SharedEngine>) -> CmdResult<()> {
+    let id = msg_id(&id)?;
+    let loc = engine.store.lock().unwrap().location(id).map_err(err)?.ok_or("message not found")?;
+    let (dest_account, dest) = engine.store.lock().unwrap().folder_path(&folder_id).map_err(err)?.ok_or("folder not found")?;
+    if dest_account != loc.account_id {
+        return Err("messages can only be copied within the same account".into());
+    }
+    let (path, uid) = (loc.folder_path.clone(), loc.uid);
+    let result = engine
+        .with_session(&loc.account_id, move |s| {
+            let (path, dest) = (path.clone(), dest.clone());
+            Box::pin(async move { imap::copy_message(s, &path, uid, &dest).await })
+        })
+        .await;
+    // The copy shows up once the destination folder syncs.
+    engine.wake(Some(&loc.account_id));
+    result.map_err(err)
+}
+
+/// Save the original message as an .eml file. Returns where it was saved.
+#[tauri::command]
+pub async fn save_message(id: String, engine: State<'_, SharedEngine>, app: AppHandle) -> CmdResult<Option<String>> {
+    let id = msg_id(&id)?;
+    let subject = engine.store.lock().unwrap().summary(id).map_err(err)?.map(|s| s.subject).unwrap_or_default();
+    let raw = raw_message(&engine, id).await?;
+    let mut name: String = subject.chars().map(|c| if "/\\:*?\"<>|".contains(c) || c.is_control() { '_' } else { c }).collect();
+    name = name.trim().chars().take(100).collect();
+    if name.is_empty() {
+        name = "message".into();
+    }
+    let name = format!("{name}.eml");
+    let picked = tauri::async_runtime::spawn_blocking(move || app.dialog().file().set_file_name(&name).blocking_save_file())
+        .await
+        .map_err(err)?;
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    std::fs::write(&path, raw).map_err(err)?;
+    Ok(Some(path.to_string_lossy().into_owned()))
+}
+
 #[tauri::command]
 pub fn sync_now(account_id: Option<String>, engine: State<SharedEngine>) {
     engine.wake(account_id.as_deref());

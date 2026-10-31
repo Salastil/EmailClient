@@ -369,6 +369,13 @@ pub async fn move_message(session: &mut Session, path: &str, uid: u32, dest: &st
     Ok(())
 }
 
+/// Copy a message into another mailbox, leaving the original in place.
+pub async fn copy_message(session: &mut Session, path: &str, uid: u32, dest: &str) -> Result<()> {
+    session.select(path).await?;
+    session.uid_copy(uid.to_string(), dest).await?;
+    Ok(())
+}
+
 /// Permanently delete a message.
 pub async fn expunge_message(session: &mut Session, path: &str, uid: u32) -> Result<()> {
     let caps = capabilities(session).await?;

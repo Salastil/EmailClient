@@ -11,13 +11,14 @@
   import FolderPane from './components/FolderPane.svelte';
   import Icon from './components/Icon.svelte';
   import MessageList from './components/MessageList.svelte';
+  import MessageMenu from './components/MessageMenu.svelte';
   import Reader from './components/Reader.svelte';
   import SettingsPane from './components/SettingsPane.svelte';
   import Splitter from './components/Splitter.svelte';
   import { api, pim } from './lib/api';
   import { displayName, longDate } from './lib/format';
   import type {
-    Account, ComposeInit, Folder, MessageAction, MessageSummary, MessageView, NotifyMode, Settings, Source, ThreadNode,
+    Account, ComposeInit, Folder, MessageMenuAction, MessageSummary, MessageView, NotifyMode, Settings, Source, ThreadNode,
   } from './lib/types';
 
   let accounts = $state<Account[]>([]);
@@ -41,6 +42,7 @@
   let searchResults = $state<MessageSummary[] | null>(null);
   /** Folder the search is limited to (from its context menu), or all mail. */
   let searchFolder = $state<Folder | null>(null);
+  let messageMenu = $state<{ message: MessageSummary; thread: MessageSummary[]; x: number; y: number } | null>(null);
   let reauthPassword = $state('');
   let reauthTotp = $state('');
   let reauthMailbox = $state('');
@@ -182,14 +184,36 @@
     return subject.replace(/^((re|fwd?|aw|sv)(\[\d+\])?:\s*)+/i, '');
   }
 
-  async function act(action: MessageAction) {
-    const v = message;
-    if (!v) return;
-    const s = v.message.summary;
+  /** The full view of `s`: the open message, or fetched for a list item. */
+  async function viewOf(s: MessageSummary): Promise<MessageView | undefined> {
+    if (message?.message.summary.id === s.id) return message;
+    return guard(api.getMessage(s.id));
+  }
+
+  /** The message left the folder: drop it from the reader if open, then reload. */
+  async function removed(s: MessageSummary, text: string) {
+    notify(text);
+    if (messageId === s.id) {
+      message = null;
+      messageId = null;
+    }
+    await refreshThreads();
+    refreshCounts();
+  }
+
+  /** Run an action on `target`, or on the open message. */
+  async function act(action: MessageMenuAction, target?: MessageSummary, thread: MessageSummary[] = []) {
+    const s = target ?? message?.message.summary;
+    if (!s) return;
     const me = accounts.find((a) => a.id === s.account_id)?.email.toLowerCase();
     switch (action) {
+      case 'open':
+        await openMessage(s);
+        break;
       case 'reply':
       case 'reply_all': {
+        const v = await viewOf(s);
+        if (!v) return;
         let cc = '';
         if (action === 'reply_all') {
           cc = [...v.message.to, ...v.message.cc]
@@ -207,7 +231,9 @@
         };
         break;
       }
-      case 'forward':
+      case 'forward': {
+        const v = await viewOf(s);
+        if (!v) return;
         compose = {
           account_id: s.account_id,
           subject: 'Fwd: ' + stripPrefix(s.subject),
@@ -216,15 +242,31 @@
           forwarded_attachments: v.message.attachments.map((a) => a.name),
         };
         break;
+      }
+      case 'edit_as_new': {
+        // Same recipients, subject, text and attachments, as a fresh message.
+        const v = await viewOf(s);
+        if (!v) return;
+        const list = (xs: { name: string | null; email: string }[]) =>
+          xs.map((a) => (a.name ? `${a.name} <${a.email}>` : a.email)).join(', ');
+        compose = {
+          account_id: s.account_id,
+          to: list(v.message.to),
+          cc: list(v.message.cc),
+          subject: s.subject,
+          text: plainBody(v),
+          forward_id: v.message.attachments.length ? s.id : null,
+          forwarded_attachments: v.message.attachments.map((a) => a.name),
+          edit_as_new: true,
+        };
+        break;
+      }
       case 'archive':
-      case 'delete': {
-        const ok = await guard(action === 'archive' ? api.archiveMessage(s.id) : api.deleteMessage(s.id));
-        if (ok !== undefined) {
-          notify(action === 'archive' ? 'Archived' : 'Moved to Trash');
-          message = null;
-          messageId = null;
-          await refreshThreads();
-          refreshCounts();
+      case 'delete':
+      case 'junk': {
+        const call = action === 'archive' ? api.archiveMessage : action === 'delete' ? api.deleteMessage : api.junkMessage;
+        if ((await guard(call(s.id))) !== undefined) {
+          await removed(s, action === 'archive' ? 'Archived' : action === 'delete' ? 'Moved to Trash' : 'Moved to Spam');
         }
         break;
       }
@@ -233,21 +275,35 @@
         await guard(api.setFlag(s.id, 'seen', !s.unread));
         refreshCounts();
         break;
+      case 'thread_read':
+        for (const m of thread.filter((m) => m.unread)) {
+          m.unread = false;
+          await guard(api.setFlag(m.id, 'seen', true));
+        }
+        refreshCounts();
+        break;
       case 'toggle_star':
         await star(s);
         break;
+      case 'save': {
+        const path = await guard(api.saveMessage(s.id));
+        if (path) notify(`Saved to ${path}`);
+        break;
+      }
     }
   }
 
-  async function moveTo(dest: string) {
-    const s = message?.message.summary;
+  async function moveTo(dest: string, target?: MessageSummary) {
+    const s = target ?? message?.message.summary;
     if (!s) return;
     if ((await guard(api.moveMessage(s.id, dest))) !== undefined) {
-      notify(`Moved to ${findFolder(folders, dest)?.name ?? 'folder'}`);
-      message = null;
-      messageId = null;
-      await refreshThreads();
-      refreshCounts();
+      await removed(s, `Moved to ${findFolder(folders, dest)?.name ?? 'folder'}`);
+    }
+  }
+
+  async function copyTo(dest: string, s: MessageSummary) {
+    if ((await guard(api.copyMessage(s.id, dest))) !== undefined) {
+      notify(`Copied to ${findFolder(folders, dest)?.name ?? 'folder'}`);
     }
   }
 
@@ -508,6 +564,7 @@
         onstar={star}
         onread={toggleRead}
         onclearsearch={clearSearch}
+        onmenu={(e, m, thread) => (messageMenu = { message: m, thread, x: e.clientX, y: e.clientY })}
       />
       <Splitter bind:width={listWidth} min={280} max={720} onrelease={persistLayout} />
       <Reader
@@ -562,6 +619,23 @@
   </Dialog>
 {:else if dialog === 'contact'}
   <ContactDialog sources={pimSources} onclose={() => (dialog = null)} />
+{/if}
+
+{#if messageMenu}
+  {@const target = messageMenu}
+  {#key target}
+    <MessageMenu
+      message={target.message}
+      folders={target.message.account_id === accountId ? folders : []}
+      x={target.x}
+      y={target.y}
+      inThread={target.thread.length > 1}
+      onaction={(a) => act(a, target.message, target.thread)}
+      onmove={(id) => moveTo(id, target.message)}
+      oncopy={(id) => copyTo(id, target.message)}
+      onclose={() => (messageMenu = null)}
+    />
+  {/key}
 {/if}
 
 {#if compose}

@@ -10,12 +10,14 @@
     onselect,
     onstar,
     onread,
+    onmenu,
   }: {
     nodes: ThreadNode[];
     selected: string | null;
     onselect: (m: MessageSummary) => void;
     onstar: (m: MessageSummary) => void;
     onread: (m: MessageSummary) => void;
+    onmenu: (e: MouseEvent, m: MessageSummary) => void;
   } = $props();
 </script>
 
@@ -29,9 +31,10 @@
         onselect={() => onselect(node.message)}
         onstar={() => onstar(node.message)}
         onread={() => onread(node.message)}
+        onmenu={(e) => onmenu(e, node.message)}
       />
       {#if node.children.length}
-        <ThreadBranch nodes={node.children} {selected} {onselect} {onstar} {onread} />
+        <ThreadBranch nodes={node.children} {selected} {onselect} {onstar} {onread} {onmenu} />
       {/if}
     </div>
   {/each}

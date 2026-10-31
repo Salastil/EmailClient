@@ -16,6 +16,7 @@
     onselect,
     onstar,
     onread,
+    onmenu,
     onclearsearch,
   }: {
     folder: Folder | null;
@@ -30,8 +31,19 @@
     onselect: (m: MessageSummary) => void;
     onstar: (m: MessageSummary) => void;
     onread: (m: MessageSummary) => void;
+    /** Right-click on a message; `thread` is every message in its thread. */
+    onmenu: (e: MouseEvent, m: MessageSummary, thread: MessageSummary[]) => void;
     onclearsearch: () => void;
   } = $props();
+
+  function flat(n: ThreadNode): MessageSummary[] {
+    return [n.message, ...n.children.flatMap(flat)];
+  }
+
+  function menu(e: MouseEvent, m: MessageSummary) {
+    const thread = threads.map(flat).find((msgs) => msgs.some((x) => x.id === m.id)) ?? [m];
+    onmenu(e, m, thread);
+  }
 
   let expanded = $state<Record<string, boolean>>({});
   let filterOpen = $state(false);
@@ -98,7 +110,7 @@
   <div class="scroll" role="listbox" aria-label="Threads">
     {#if searchResults}
       {#each searchResults as m (m.id)}
-        <MessageCard message={m} selected={selected === m.id} onselect={() => onselect(m)} onstar={() => onstar(m)} onread={() => onread(m)} />
+        <MessageCard message={m} selected={selected === m.id} onselect={() => onselect(m)} onstar={() => onstar(m)} onread={() => onread(m)} onmenu={(e) => onmenu(e, m, [m])} />
       {:else}
         <div class="empty"><Icon name="search_off" size={40} /><p>No messages match</p></div>
       {/each}
@@ -113,9 +125,10 @@
         ontoggle={() => (expanded[t.message.id] = !expanded[t.message.id])}
         onstar={() => onstar(t.message)}
         onread={() => onread(t.message)}
+        onmenu={(e) => menu(e, t.message)}
       />
       {#if expanded[t.message.id] && t.children.length}
-        <ThreadBranch nodes={t.children} {selected} {onselect} {onstar} {onread} />
+        <ThreadBranch nodes={t.children} {selected} {onselect} {onstar} {onread} onmenu={menu} />
       {/if}
     {:else}
       <div class="empty">
