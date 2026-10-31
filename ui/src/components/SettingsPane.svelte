@@ -1,7 +1,8 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import { folderIcon } from '../lib/format';
-  import type { Account, FolderRole, NotifyMode, RuleField, Settings } from '../lib/types';
+  import { api } from '../lib/api';
+  import type { Account, AccountConfig, FolderRole, NotifyMode, RuleField, Settings } from '../lib/types';
 
   let {
     settings,
@@ -9,6 +10,7 @@
     onchange,
     onnotify,
     ontest,
+    onaccountschanged,
     onclose,
   }: {
     settings: Settings;
@@ -16,15 +18,64 @@
     onchange: (s: Settings) => void;
     onnotify: (accountId: string, mode: NotifyMode) => void;
     ontest: (accountId: string) => Promise<boolean>;
+    onaccountschanged: () => void;
     onclose: () => void;
   } = $props();
 
-  type Section = 'accounts' | 'notifications' | 'tray' | 'privacy' | 'about';
+  let editing = $state<{ id: string; name: string; sender_name: string; color: string; config: AccountConfig } | null>(null);
+  let confirmRemove = $state<string | null>(null);
+  let accountError = $state<string | null>(null);
+
+  async function edit(a: Account) {
+    accountError = null;
+    const config = await api.accountDetails(a.id);
+    editing = { id: a.id, name: config.name, sender_name: config.sender_name, color: config.color, config };
+  }
+
+  async function saveAccount() {
+    if (!editing) return;
+    try {
+      await api.updateAccount(editing.id, { name: editing.name, sender_name: editing.sender_name, color: editing.color });
+      editing = null;
+      onaccountschanged();
+    } catch (e) {
+      accountError = String(e);
+    }
+  }
+
+  async function removeAccount(id: string) {
+    try {
+      await api.removeAccount(id);
+      confirmRemove = null;
+      editing = null;
+      onaccountschanged();
+    } catch (e) {
+      accountError = String(e);
+    }
+  }
+
+  const OAUTH_PROVIDERS = [
+    { key: 'google', name: 'Google', secret: true },
+    { key: 'microsoft', name: 'Microsoft', secret: false },
+    { key: 'yahoo', name: 'Yahoo', secret: true },
+    { key: 'aol', name: 'AOL', secret: true },
+    { key: 'fastmail', name: 'Fastmail', secret: false },
+  ];
+
+  function oauthClient(key: string) {
+    s.oauth_clients[key] ??= { client_id: '', client_secret: null };
+    return s.oauth_clients[key];
+  }
+
+  const security = (x: string) => ({ tls: 'SSL/TLS', starttls: 'STARTTLS', none: 'none' })[x] ?? x;
+
+  type Section = 'accounts' | 'notifications' | 'tray' | 'privacy' | 'advanced' | 'about';
   const nav: { id: Section; label: string; icon: string }[] = [
     { id: 'accounts', label: 'Accounts', icon: 'manage_accounts' },
     { id: 'notifications', label: 'Notifications', icon: 'notifications' },
     { id: 'tray', label: 'Tray & window', icon: 'select_window' },
     { id: 'privacy', label: 'Privacy', icon: 'shield' },
+    { id: 'advanced', label: 'Advanced', icon: 'tune' },
     { id: 'about', label: 'About', icon: 'info' },
   ];
   let section = $state<Section>('accounts');
@@ -78,6 +129,7 @@
 
     {#if section === 'accounts'}
       <h2>Accounts</h2>
+      {#if !accounts.length}<p class="hint">No accounts yet. Use the + button in the left rail to add one.</p>{/if}
       {#each accounts as a (a.id)}
         <div class="card account">
           <span class="glyph" style:background={a.color}>{a.name[0]}</span>
@@ -88,7 +140,33 @@
               {#each modes as m}<option value={m.mode}>{m.label}</option>{/each}
             </select>
           </label>
+          <button class="icon-btn" title="Edit" onclick={() => edit(a)}><Icon name="edit" /></button>
         </div>
+        {#if editing?.id === a.id}
+          <div class="card editor">
+            <label class="field">Account name<input class="text" bind:value={editing.name} /></label>
+            <label class="field">Your name (From header)<input class="text" bind:value={editing.sender_name} /></label>
+            <label class="field">Colour<input type="color" bind:value={editing.color} /></label>
+            <p class="hint">
+              Incoming {editing.config.imap.host}:{editing.config.imap.port} ({security(editing.config.imap.security)}) ·
+              Outgoing {editing.config.smtp.host}:{editing.config.smtp.port} ({security(editing.config.smtp.security)}) ·
+              Sign-in: {editing.config.auth.kind === 'o_auth2' ? 'browser (OAuth)' : editing.config.auth.kind === 'proton_bridge' ? 'Proton bridge' : 'password in system keyring'}
+            </p>
+            <div class="inline">
+              {#if confirmRemove === a.id}
+                <span class="grow">Remove {a.email} and its cached mail from this computer?</span>
+                <button class="tonal-btn" onclick={() => (confirmRemove = null)}>Keep</button>
+                <button class="danger-btn" onclick={() => removeAccount(a.id)}>Remove</button>
+              {:else}
+                <button class="danger-btn" onclick={() => (confirmRemove = a.id)}><Icon name="delete" size={18} /> Remove account</button>
+                <span class="grow"></span>
+                <button class="tonal-btn" onclick={() => (editing = null)}>Cancel</button>
+                <button class="filled-btn" onclick={saveAccount}>Save</button>
+              {/if}
+            </div>
+            {#if accountError}<p class="err">{accountError}</p>{/if}
+          </div>
+        {/if}
       {/each}
     {:else if section === 'notifications'}
       <h2>Notifications</h2>
@@ -222,6 +300,22 @@
           <input type="checkbox" class="switch" bind:checked={s.privacy.load_remote_images} onchange={commit} />
         </label>
       </div>
+    {:else if section === 'advanced'}
+      <h2>Advanced</h2>
+      <h3>OAuth clients</h3>
+      <p class="hint">Browser sign-in needs an OAuth client registered with each provider. Builds may include one; enter your own here to override it (for Google, create a “Desktop app” client in Google Cloud Console).</p>
+      <div class="card">
+        {#each OAUTH_PROVIDERS as p}
+          {@const c = oauthClient(p.key)}
+          <div class="oauth-row">
+            <b>{p.name}</b>
+            <input class="text grow-input" placeholder="Client ID" bind:value={c.client_id} onchange={commit} />
+            {#if p.secret}
+              <input class="text" placeholder="Client secret (if any)" value={c.client_secret ?? ''} onchange={(e) => { c.client_secret = (e.currentTarget as HTMLInputElement).value || null; commit(); }} />
+            {/if}
+          </div>
+        {/each}
+      </div>
     {:else}
       <h2>About Moho Mail</h2>
       <div class="card about">
@@ -313,5 +407,13 @@
   .filter-chip { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border: 1px solid var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-small); text-transform: capitalize; }
   .filter-chip.on { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); border-color: transparent; }
   .about p { margin: 8px 0; }
+  .editor { display: flex; flex-direction: column; gap: 10px; padding: 14px 16px; margin-top: -6px; }
+  .field { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--md-sys-color-on-surface-variant); }
+  .field input[type='color'] { width: 64px; height: 32px; border: 0; background: none; }
+  .danger-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-error); color: #fff; font-weight: 600; }
+  .err { color: #ffb4ab; font-size: 13px; }
+  .oauth-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+  .oauth-row b { width: 90px; flex: none; }
+  .grow-input { flex: 1; }
   code { font-family: var(--mono); font-size: 12px; background: var(--md-sys-color-surface-container-highest); padding: 1px 6px; border-radius: 4px; }
 </style>

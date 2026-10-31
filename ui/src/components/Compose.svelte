@@ -1,50 +1,113 @@
 <script lang="ts">
+  import AddressInput from './AddressInput.svelte';
   import Dialog from './Dialog.svelte';
   import Icon from './Icon.svelte';
-  import type { Account } from '../lib/types';
+  import { api } from '../lib/api';
+  import type { Account, ComposeInit } from '../lib/types';
 
   let {
-    from,
-    to = '',
-    subject = '',
+    accounts,
+    init,
     onclose,
-  }: { from: Account | null; to?: string; subject?: string; onclose: () => void } = $props();
+    onsent,
+  }: { accounts: Account[]; init: ComposeInit; onclose: () => void; onsent: () => void } = $props();
 
-  let fields = $state({ to: '', cc: '', subject: '', body: '' });
-  $effect.pre(() => {
-    fields.to = to;
-    fields.subject = subject;
+  // svelte-ignore state_referenced_locally
+  let f = $state({
+    account_id: init.account_id ?? accounts[0]?.id ?? '',
+    to: init.to ?? '',
+    cc: init.cc ?? '',
+    bcc: '',
+    subject: init.subject ?? '',
+    text: init.text ?? '',
   });
+  // svelte-ignore state_referenced_locally
+  let showCc = $state(!!init.cc);
+  let attachments = $state<string[]>([]);
+  let sending = $state(false);
+  let error = $state<string | null>(null);
+
+  async function attach() {
+    const picked = await api.pickAttachments().catch((e) => { error = String(e); return []; });
+    attachments = [...attachments, ...picked.filter((p) => !attachments.includes(p))];
+  }
+
+  async function send() {
+    error = null;
+    sending = true;
+    try {
+      await api.sendMessage({
+        ...f,
+        reply_to_id: init.reply_to_id ?? null,
+        forward_id: init.forward_id ?? null,
+        attachments,
+      });
+      onsent();
+    } catch (e) {
+      error = String(e);
+    } finally {
+      sending = false;
+    }
+  }
+
+  const base = (p: string) => p.split('/').pop();
 </script>
 
-<Dialog title="New message" {onclose} width={720}>
+<svelte:window onkeydown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') send(); }} />
+
+<Dialog title={init.reply_to_id ? 'Reply' : init.forward_id ? 'Forward' : 'New message'} {onclose} width={760}>
   <div class="fields">
-    <div class="row"><span>From</span><b>{from ? `${from.name} <${from.email}>` : ''}</b></div>
-    <label class="row"><span>To</span><input bind:value={fields.to} /></label>
-    <label class="row"><span>Cc</span><input bind:value={fields.cc} /></label>
-    <label class="row"><span>Subject</span><input bind:value={fields.subject} /></label>
-    <textarea bind:value={fields.body} rows="14" placeholder="Write your message…"></textarea>
+    <label class="row"><span>From</span>
+      <select bind:value={f.account_id}>
+        {#each accounts as a}<option value={a.id}>{a.name} &lt;{a.email}&gt;</option>{/each}
+      </select>
+    </label>
+    <div class="row"><span>To</span><AddressInput bind:value={f.to} />
+      {#if !showCc}<button class="tiny" onclick={() => (showCc = true)}>Cc/Bcc</button>{/if}
+    </div>
+    {#if showCc}
+      <div class="row"><span>Cc</span><AddressInput bind:value={f.cc} /></div>
+      <div class="row"><span>Bcc</span><AddressInput bind:value={f.bcc} /></div>
+    {/if}
+    <label class="row"><span>Subject</span><input bind:value={f.subject} /></label>
+    <textarea bind:value={f.text} rows="16" placeholder="Write your message…"></textarea>
+    {#if attachments.length || init.forwarded_attachments?.length}
+      <div class="atts">
+        {#each init.forwarded_attachments ?? [] as name}
+          <span class="att"><Icon name="attach_file" size={16} />{name}</span>
+        {/each}
+        {#each attachments as p, i}
+          <span class="att" title={p}><Icon name="attach_file" size={16} />{base(p)}
+            <button aria-label="Remove" onclick={() => attachments.splice(i, 1)}><Icon name="close" size={14} /></button>
+          </span>
+        {/each}
+      </div>
+    {/if}
+    {#if error}<p class="error"><Icon name="error" size={18} /> {error}</p>{/if}
   </div>
   {#snippet actions()}
-    <button class="icon-btn" title="Attach"><Icon name="attach_file" /></button>
+    <button class="icon-btn" title="Attach files" onclick={attach}><Icon name="attach_file" /></button>
     <span style="flex:1"></span>
     <button class="tonal-btn" onclick={onclose}>Discard</button>
-    <button class="filled-btn" disabled title="Sending arrives with SMTP support (milestone 3)"><Icon name="send" size={18} /> Send</button>
+    <button class="filled-btn" disabled={sending || !f.account_id} onclick={send} title="Send (Ctrl+Enter)">
+      <Icon name="send" size={18} /> {sending ? 'Sending…' : 'Send'}
+    </button>
   {/snippet}
 </Dialog>
 
 <style>
   .fields { display: flex; flex-direction: column; }
   .row { display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--md-sys-color-outline-variant); min-height: 40px; }
-  .row span { width: 60px; font-size: 13px; color: var(--md-sys-color-on-surface-variant); }
-  .row input { flex: 1; height: 38px; border: 0; outline: 0; background: none; }
+  .row > span { width: 60px; flex: none; font-size: 13px; color: var(--md-sys-color-on-surface-variant); }
+  .row input, .row select { flex: 1; height: 38px; border: 0; outline: 0; background: none; }
+  .row select option { background: var(--md-sys-color-surface-container-high); }
+  .tiny { font-size: 12px; color: var(--md-sys-color-primary); }
   textarea {
-    margin-top: 12px;
-    resize: vertical;
-    border: 0;
-    outline: 0;
-    background: var(--md-sys-color-surface-container);
-    border-radius: var(--md-sys-shape-corner-medium);
-    padding: 12px;
+    margin-top: 12px; resize: vertical; border: 0; outline: 0; min-height: 240px;
+    background: var(--md-sys-color-surface-container); border-radius: var(--md-sys-shape-corner-medium); padding: 12px;
+    font: 14px/1.5 var(--font);
   }
+  .atts { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+  .att { display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 10px; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-surface-container-highest); font-size: 13px; }
+  .error { display: flex; gap: 8px; color: #ffb4ab; font-size: 13px; margin: 10px 0 0; }
 </style>

@@ -12,6 +12,8 @@ pub struct AppState {
     /// Notifications are paused from the tray menu until this time.
     pub paused_until: Mutex<Option<DateTime<Local>>>,
     tray: Mutex<Option<TrayHandle>>,
+    /// Cancels the browser sign-in in progress.
+    pub oauth_cancel: Mutex<Option<tokio::sync::oneshot::Sender<()>>>,
 }
 
 impl AppState {
@@ -21,6 +23,7 @@ impl AppState {
             settings: Mutex::new(settings),
             paused_until: Mutex::new(None),
             tray: Mutex::new(None),
+            oauth_cancel: Mutex::new(None),
         }
     }
 

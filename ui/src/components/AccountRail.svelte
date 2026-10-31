@@ -49,7 +49,7 @@
   <div class="accounts">
     {#each accounts as a (a.id)}
       {@const active = view === 'mail' && selected === a.id}
-      <div class="slot" class:active>
+      <div class="slot" class:active class:syncing={a.status.state === 'syncing'}>
         <span class="pill"></span>
         <button
           class="avatar"
@@ -62,7 +62,11 @@
         >
           {providerIcon[a.provider] || a.name[0]}
         </button>
-        {#if a.notify === 'muted'}
+        {#if a.status.state === 'needs_auth' || a.status.state === 'error'}
+          <span class="corner alert" title={a.status.message}><Icon name="priority_high" size={12} /></span>
+        {:else if a.status.state === 'offline'}
+          <span class="corner muted" title="Offline: {a.status.message}"><Icon name="cloud_off" size={12} /></span>
+        {:else if a.notify === 'muted'}
           <span class="corner muted" title="Notifications muted"><Icon name="notifications_off" size={12} /></span>
         {:else if a.unread > 0}
           <span class="corner badge">{a.unread > 99 ? '99+' : a.unread}</span>
@@ -190,6 +194,8 @@
     color: var(--md-sys-color-on-surface-variant);
   }
   .important { color: var(--md-sys-color-primary); }
+  .alert { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; background: var(--md-sys-color-error); color: #fff; }
+  .syncing .avatar { box-shadow: 0 0 0 2px var(--md-sys-color-primary); }
 
   .tools {
     display: flex;

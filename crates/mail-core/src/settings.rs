@@ -51,6 +51,14 @@ pub struct PrivacySettings {
     pub load_remote_images: bool,
 }
 
+/// OAuth client registration for one provider (Settings → Advanced).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct OAuthClient {
+    pub client_id: String,
+    pub client_secret: Option<String>,
+}
+
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Settings {
@@ -60,6 +68,11 @@ pub struct Settings {
     pub notifications: NotifySettings,
     /// Notification mode per account id.
     pub account_notify: HashMap<String, NotifyMode>,
+    /// User-supplied OAuth clients keyed by provider ("google", "microsoft", ...).
+    /// Empty entries fall back to the client IDs compiled into the build.
+    pub oauth_clients: HashMap<String, OAuthClient>,
+    /// Account order in the rail.
+    pub account_order: Vec<String>,
 }
 
 /// Write atomically (temp file + rename) so a crash never leaves a torn file.

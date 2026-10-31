@@ -9,11 +9,13 @@
     selected,
     onselect,
     onstar,
+    onread,
   }: {
     nodes: ThreadNode[];
     selected: string | null;
     onselect: (m: MessageSummary) => void;
     onstar: (m: MessageSummary) => void;
+    onread: (m: MessageSummary) => void;
   } = $props();
 </script>
 
@@ -26,9 +28,10 @@
         child
         onselect={() => onselect(node.message)}
         onstar={() => onstar(node.message)}
+        onread={() => onread(node.message)}
       />
       {#if node.children.length}
-        <ThreadBranch nodes={node.children} {selected} {onselect} {onstar} />
+        <ThreadBranch nodes={node.children} {selected} {onselect} {onstar} {onread} />
       {/if}
     </div>
   {/each}

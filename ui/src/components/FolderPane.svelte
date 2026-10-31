@@ -10,6 +10,8 @@
     width,
     onselect,
     oncompose,
+    onsync,
+    onreauth,
   }: {
     account: Account | null;
     folders: Folder[];
@@ -17,7 +19,20 @@
     width: number;
     onselect: (f: Folder) => void;
     oncompose: () => void;
+    onsync: () => void;
+    onreauth: () => void;
   } = $props();
+
+  const status = $derived.by(() => {
+    const st = account?.status;
+    switch (st?.state) {
+      case 'syncing': return { dot: 'sync', text: 'Syncing…', title: '' };
+      case 'offline': return { dot: 'off', text: 'Offline', title: st.message };
+      case 'error': return { dot: 'err', text: 'Sync problem', title: st.message };
+      case 'needs_auth': return { dot: 'err', text: 'Sign-in needed', title: st.message };
+      default: return { dot: 'ok', text: 'Up to date', title: '' };
+    }
+  });
 
   const FAVORITES = ['inbox', 'starred', 'sent', 'drafts', 'archive', 'spam', 'trash'];
   let sections = $derived([
@@ -53,12 +68,18 @@
   </div>
 
   {#if account}
+    {#if account.status.state === 'needs_auth'}
+      <button class="reauth" onclick={onreauth}><Icon name="key" size={18} /> Sign in again</button>
+    {/if}
     <footer>
       <span class="me" style:background={account.color}>{account.email[0].toUpperCase()}</span>
       <div class="who">
-        <span class="name">{account.email.split('@')[0]}</span>
-        <span class="status"><span class="dot"></span>Online · synced</span>
+        <span class="name">{account.email}</span>
+        <span class="status" title={status.title}><span class="dot {status.dot}"></span>{status.text}</span>
       </div>
+      <button class="icon-btn" title="Check for new mail" onclick={onsync}>
+        <span class:spin={status.dot === 'sync'}><Icon name="sync" size={18} /></span>
+      </button>
     </footer>
   {/if}
 </aside>
@@ -118,7 +139,17 @@
     font-weight: 700;
     color: #fff;
   }
-  .who { display: flex; flex-direction: column; min-width: 0; }
+  .who { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .who .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dot.sync { background: var(--md-sys-color-primary); }
+  .dot.off { background: #9aa1a9; }
+  .dot.err { background: var(--md-sys-color-error); }
+  .spin { display: inline-block; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(-360deg); } }
+  .reauth {
+    display: flex; align-items: center; justify-content: center; gap: 8px; margin: 8px 12px; height: 36px;
+    border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-error); color: #fff; font-weight: 600;
+  }
   .who .name { font-weight: 600; font-size: 13px; }
   .dot {
     display: inline-block;

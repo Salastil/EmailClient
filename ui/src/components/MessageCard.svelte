@@ -12,6 +12,7 @@
     onselect,
     ontoggle,
     onstar,
+    onread,
   }: {
     message: MessageSummary;
     selected: boolean;
@@ -21,6 +22,7 @@
     onselect: () => void;
     ontoggle?: () => void;
     onstar: () => void;
+    onread: () => void;
   } = $props();
 </script>
 
@@ -42,8 +44,12 @@
       {displayName(message.from)} <span class="addr">&lt;{message.from.email}&gt;</span>
     </span>
     <span class="date">{shortDate(message.date)}</span>
-    <button class="more icon-btn" title="More" onclick={(e) => e.stopPropagation()}>
-      <Icon name="more_vert" size={18} />
+    <button
+      class="more icon-btn"
+      title={message.unread ? 'Mark as read' : 'Mark as unread'}
+      onclick={(e) => { e.stopPropagation(); onread(); }}
+    >
+      <Icon name={message.unread ? 'drafts' : 'mark_email_unread'} size={18} />
     </button>
   </div>
   <div class="bottom">

@@ -408,3 +408,41 @@ pub async fn server_uids(session: &mut Session, path: &str) -> Result<HashSet<u3
     session.examine(path).await?;
     Ok(session.uid_search("ALL").await?)
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum IdleOutcome {
+    NewData,
+    Timeout,
+    /// `wake` was notified (user action, or shutdown).
+    Woken,
+}
+
+/// IDLE on a mailbox until the server reports changes, `timeout` passes or
+/// `wake` fires.
+pub async fn idle_until(
+    mut session: Session,
+    path: &str,
+    timeout: Duration,
+    wake: &tokio::sync::Notify,
+) -> Result<(Session, IdleOutcome)> {
+    session.examine(path).await?;
+    let mut handle = session.idle();
+    handle.init().await?;
+    let outcome = {
+        let (wait, stop) = handle.wait_with_timeout(timeout);
+        tokio::pin!(wait);
+        tokio::select! {
+            res = &mut wait => match res? {
+                IdleResponse::NewData(_) => IdleOutcome::NewData,
+                _ => IdleOutcome::Timeout,
+            },
+            _ = wake.notified() => {
+                drop(stop);
+                let _ = wait.await;
+                IdleOutcome::Woken
+            }
+        }
+    };
+    let session = handle.done().await?;
+    Ok((session, outcome))
+}

@@ -10,6 +10,7 @@ set -euo pipefail
 DIR="${MOHO_TEST_DIR:-${XDG_RUNTIME_DIR:-/tmp}/moho-mail-test}"
 IMAP_PORT=11143
 DAV_PORT=15232
+SMTP_PORT=11025
 
 start() {
   mkdir -p "$DIR"/{run,state,mail,dav}
@@ -77,6 +78,11 @@ service anvil {
 }
 CONF
   dovecot -c "$DIR/dovecot.conf"
+  if python3 -c "import aiosmtpd" 2>/dev/null; then
+    python3 "$(dirname "$0")/smtp-sink.py" "$DIR/dovecot.conf" "$SMTP_PORT" >"$DIR/smtp.log" 2>&1 &
+    echo $! > "$DIR/smtp.pid"
+    echo "export MOHO_TEST_SMTP=127.0.0.1:$SMTP_PORT"
+  fi
   if command -v radicale >/dev/null; then
     printf 'test:secret\n' > "$DIR/dav-users"
     radicale --server-hosts "127.0.0.1:$DAV_PORT" --storage-filesystem-folder "$DIR/dav" \
@@ -91,7 +97,9 @@ CONF
 
 stop() {
   doveadm -c "$DIR/dovecot.conf" stop 2>/dev/null || true
-  [ -f "$DIR/radicale.pid" ] && kill "$(cat "$DIR/radicale.pid")" 2>/dev/null || true
+  for p in radicale smtp; do
+    [ -f "$DIR/$p.pid" ] && kill "$(cat "$DIR/$p.pid")" 2>/dev/null || true
+  done
   rm -rf "$DIR"
 }
 

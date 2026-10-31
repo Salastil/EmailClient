@@ -115,7 +115,7 @@ pub async fn send(server: &ServerConfig, creds: &Credentials, message: &Message)
         .port(server.port)
         .credentials(LCredentials::new(user.clone(), secret.clone()))
         .authentication(mechanisms)
-        .timeout(Some(std::time::Duration::from_secs(60)))
+        .timeout(Some(std::time::Duration::from_secs(30)))
         .build();
     transport.send(message.clone()).await.map_err(|e| {
         if e.is_permanent() && e.to_string().to_lowercase().contains("auth") {
