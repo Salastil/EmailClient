@@ -159,6 +159,7 @@ export interface Settings {
   account_notify: Record<string, NotifyMode>;
   oauth_clients: Record<string, { client_id: string; client_secret: string | null }>;
   account_order: string[];
+  favorite_folders: string[];
 }
 
 export interface ComposeInit {

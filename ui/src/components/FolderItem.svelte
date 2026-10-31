@@ -8,8 +8,18 @@
     folder,
     selected,
     depth = 0,
+    nested = true,
     onselect,
-  }: { folder: Folder; selected: string | null; depth?: number; onselect: (f: Folder) => void } = $props();
+    onmenu,
+  }: {
+    folder: Folder;
+    selected: string | null;
+    depth?: number;
+    /** Show subfolders (off for the flat Favorites list). */
+    nested?: boolean;
+    onselect: (f: Folder) => void;
+    onmenu: (e: MouseEvent, f: Folder) => void;
+  } = $props();
 
   let open = $state(true);
 </script>
@@ -19,8 +29,10 @@
   class:active={selected === folder.id}
   class:unread={folder.unread > 0}
   style:padding-left="{8 + depth * 16}px"
+  role="none"
+  oncontextmenu={(e) => onmenu(e, folder)}
 >
-  {#if folder.children.length}
+  {#if nested && folder.children.length}
     <button class="twisty" aria-label={open ? 'Collapse' : 'Expand'} onclick={() => (open = !open)}>
       <Icon name={open ? 'expand_more' : 'chevron_right'} size={16} />
     </button>
@@ -33,9 +45,9 @@
     {#if folder.unread > 0}<span class="count">{folder.unread}</span>{/if}
   </button>
 </div>
-{#if open}
+{#if nested && open}
   {#each folder.children as child (child.id)}
-    <FolderItem folder={child} {selected} depth={depth + 1} {onselect} />
+    <FolderItem folder={child} {selected} depth={depth + 1} {onselect} {onmenu} />
   {/each}
 {/if}
 

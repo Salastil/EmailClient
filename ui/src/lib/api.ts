@@ -9,7 +9,15 @@ export const api = {
   listAccounts: () => invoke<Account[]>('list_accounts'),
   listFolders: (accountId: string) => invoke<Folder[]>('list_folders', { accountId }),
   listThreads: (folderId: string) => invoke<ThreadNode[]>('list_threads', { folderId }),
-  search: (query: string, accountId: string | null) => invoke<MessageSummary[]>('search', { query, accountId }),
+  search: (query: string, accountId: string | null, folderId: string | null = null) =>
+    invoke<MessageSummary[]>('search', { query, accountId, folderId }),
+  createFolder: (accountId: string, parentId: string | null, name: string) =>
+    invoke<string>('create_folder', { accountId, parentId, name }),
+  renameFolder: (folderId: string, name: string) => invoke<string>('rename_folder', { folderId, name }),
+  moveFolder: (folderId: string, destId: string | null) => invoke<string>('move_folder', { folderId, destId }),
+  copyFolder: (folderId: string, destId: string | null) => invoke<string>('copy_folder', { folderId, destId }),
+  deleteFolder: (folderId: string) => invoke<'moved_to_trash' | 'deleted'>('delete_folder', { folderId }),
+  markFolderRead: (folderId: string) => invoke<void>('mark_folder_read', { folderId }),
   getMessage: (id: string, allowRemote = false) => invoke<MessageView>('get_message', { id, allowRemote }),
   openAttachment: (id: string, index: number) => invoke<void>('open_attachment', { id, index }),
   saveAttachment: (id: string, index: number) => invoke<string | null>('save_attachment', { id, index }),

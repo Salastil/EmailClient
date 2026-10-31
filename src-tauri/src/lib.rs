@@ -1,5 +1,6 @@
 mod commands;
 mod engine;
+mod folders;
 mod launch;
 mod notifications;
 mod pim;
@@ -94,6 +95,12 @@ pub fn run() {
             commands::archive_message,
             commands::delete_message,
             commands::sync_now,
+            folders::create_folder,
+            folders::rename_folder,
+            folders::move_folder,
+            folders::copy_folder,
+            folders::delete_folder,
+            folders::mark_folder_read,
             commands::send_message,
             commands::complete_address,
             commands::pick_attachments,

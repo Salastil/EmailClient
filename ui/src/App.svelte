@@ -39,6 +39,8 @@
   let toast = $state<{ text: string; error?: boolean } | null>(null);
   let query = $state('');
   let searchResults = $state<MessageSummary[] | null>(null);
+  /** Folder the search is limited to (from its context menu), or all mail. */
+  let searchFolder = $state<Folder | null>(null);
   let reauthPassword = $state('');
   let reauthTotp = $state('');
   let reauthMailbox = $state('');
@@ -275,7 +277,37 @@
       return;
     }
     view = 'mail';
-    searchResults = (await guard(api.search(q, null))) ?? [];
+    searchResults = (await guard(api.search(q, null, searchFolder?.id ?? null))) ?? [];
+  }
+
+  function searchIn(f: Folder) {
+    searchFolder = f;
+    searchResults = null;
+    search.focus();
+    search.select();
+  }
+
+  function clearSearch() {
+    query = '';
+    searchResults = null;
+    searchFolder = null;
+  }
+
+  async function toggleFavorite(f: Folder) {
+    if (!settings) return;
+    const favs = settings.favorite_folders;
+    await saveSettings({
+      ...settings,
+      favorite_folders: favs.includes(f.id) ? favs.filter((id) => id !== f.id) : [...favs, f.id],
+    });
+  }
+
+  async function foldersChanged(selectId: string | null) {
+    // The backend may have rewritten favorites (rename, move, delete).
+    settings = (await guard(api.getSettings())) ?? settings;
+    if (selectId) folderId = selectId;
+    await refreshFolders();
+    await refreshThreads();
   }
 
   async function saveSettings(next: Settings) {
@@ -402,7 +434,21 @@
     <span class="brand"><Icon name="forum" size={20} fill /> Moho Mail</span>
     <form class="search" onsubmit={(e) => { e.preventDefault(); runSearch(); }}>
       <Icon name="search" size={18} />
-      <input bind:this={search} bind:value={query} placeholder="Search all mail" oninput={() => !query && (searchResults = null)} />
+      {#if searchFolder}
+        <span class="scope">
+          {searchFolder.name}
+          <button type="button" aria-label="Search all mail instead" onclick={() => { searchFolder = null; if (query.trim()) runSearch(); }}>
+            <Icon name="close" size={14} />
+          </button>
+        </span>
+      {/if}
+      <input
+        bind:this={search}
+        bind:value={query}
+        placeholder={searchFolder ? `Search in ${searchFolder.name}` : 'Search all mail'}
+        oninput={() => !query && (searchResults = null)}
+        onkeydown={(e) => e.key === 'Backspace' && !query && (searchFolder = null)}
+      />
       <kbd>Ctrl K</kbd>
     </form>
     <span class="spacer"></span>
@@ -442,6 +488,11 @@
         oncompose={() => (compose = { account_id: accountId })}
         onsync={() => api.syncNow(accountId)}
         onreauth={reauth}
+        favorites={settings?.favorite_folders ?? []}
+        ontogglefavorite={toggleFavorite}
+        onsearchin={searchIn}
+        onfolderschanged={foldersChanged}
+        {notify}
       />
       <Splitter bind:width={foldersWidth} min={180} max={420} onrelease={persistLayout} />
       <MessageList
@@ -449,13 +500,14 @@
         {threads}
         {searchResults}
         searchQuery={query}
+        searchIn={searchFolder?.name ?? null}
         loading={loadingThreads || account?.status.state === 'syncing'}
         selected={messageId}
         width={listWidth}
         onselect={(m) => openMessage(m)}
         onstar={star}
         onread={toggleRead}
-        onclearsearch={() => { query = ''; searchResults = null; }}
+        onclearsearch={clearSearch}
       />
       <Splitter bind:width={listWidth} min={280} max={720} onrelease={persistLayout} />
       <Reader
@@ -535,6 +587,13 @@
     color: var(--md-sys-color-on-surface-variant);
   }
   .search input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; font-size: 13px; }
+  .scope {
+    display: inline-flex; align-items: center; gap: 2px; max-width: 40%; padding: 0 2px 0 8px; height: 20px; flex: none;
+    border-radius: var(--md-sys-shape-corner-full); font-size: 12px; white-space: nowrap; overflow: hidden;
+    background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);
+  }
+  .scope button { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; }
+  .scope button:hover { background: var(--md-sys-state-hover); }
   kbd { font: 11px var(--font); padding: 1px 6px; border-radius: 4px; background: var(--md-sys-color-surface-container-highest); }
   .columns { flex: 1; min-height: 0; display: flex; }
   .welcome {

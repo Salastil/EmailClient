@@ -211,6 +211,47 @@ impl Store {
         tx.commit()
     }
 
+    /// Server paths of a folder and everything below it, parents first.
+    pub fn subtree_paths(&self, account_id: &str, path: &str, delim: &str) -> Result<Vec<String>> {
+        Ok(self.subtree(account_id, path, delim)?.into_iter().map(|(p, _)| p).collect())
+    }
+
+    /// Like [`Self::subtree_paths`], with whether each folder can hold messages.
+    pub fn subtree(&self, account_id: &str, path: &str, delim: &str) -> Result<Vec<(String, bool)>> {
+        let mut st =
+            self.conn.prepare("SELECT path, selectable FROM folders WHERE account_id = ?1 ORDER BY length(path), sort")?;
+        let below = format!("{path}{delim}");
+        let rows = st.query_map([account_id], |r| Ok((r.get::<_, String>(0)?, r.get(1)?)))?.collect::<Result<Vec<_>>>()?;
+        Ok(rows.into_iter().filter(|(p, _)| p == path || p.starts_with(&below)).collect())
+    }
+
+    /// Follow a server-side rename of a folder (and its subfolders) so their
+    /// cached messages and sync state carry over instead of being refetched.
+    pub fn rename_folder_tree(&mut self, account_id: &str, from: &str, to: &str, delim: &str) -> Result<()> {
+        let paths = self.subtree_paths(account_id, from, delim)?;
+        let tx = self.conn.transaction()?;
+        // Folder ids change while messages still point at them; check at commit.
+        tx.execute_batch("PRAGMA defer_foreign_keys = ON")?;
+        for old in &paths {
+            let new = format!("{to}{}", &old[from.len()..]);
+            let parent = new.rsplit_once(delim).map(|(p, _)| folder_id(account_id, p));
+            tx.execute(
+                "UPDATE folders SET id = ?1, path = ?2, parent = ?3 WHERE id = ?4",
+                params![folder_id(account_id, &new), new, parent, folder_id(account_id, old)],
+            )?;
+            tx.execute(
+                "UPDATE messages SET folder_id = ?1 WHERE folder_id = ?2",
+                params![folder_id(account_id, &new), folder_id(account_id, old)],
+            )?;
+        }
+        tx.commit()
+    }
+
+    pub fn mark_folder_read(&mut self, folder_id: &str) -> Result<()> {
+        self.conn.execute("UPDATE messages SET unread = 0 WHERE folder_id = ?1 AND unread", [folder_id])?;
+        Ok(())
+    }
+
     pub fn folder_path(&self, folder_id: &str) -> Result<Option<(String, String)>> {
         self.conn
             .query_row("SELECT account_id, path FROM folders WHERE id = ?1", [folder_id], |r| {
@@ -487,8 +528,8 @@ impl Store {
         Ok(false)
     }
 
-    /// Full-text search. Each word is matched as a prefix.
-    pub fn search(&self, query: &str, account_id: Option<&str>, limit: usize) -> Result<Vec<MessageSummary>> {
+    /// Full-text search, optionally within one account or folder. Each word is matched as a prefix.
+    pub fn search(&self, query: &str, account_id: Option<&str>, folder_id: Option<&str>, limit: usize) -> Result<Vec<MessageSummary>> {
         let terms: Vec<String> = query
             .split_whitespace()
             .map(|w| w.chars().filter(|c| c.is_alphanumeric() || *c == '@' || *c == '.').collect::<String>())
@@ -501,10 +542,10 @@ impl Store {
         let cols = SUMMARY_COLS.split(", ").map(|c| format!("m.{c}")).collect::<Vec<_>>().join(", ");
         let mut st = self.conn.prepare(&format!(
             "SELECT {cols} FROM messages_fts JOIN messages m ON m.id = messages_fts.rowid
-             WHERE messages_fts MATCH ?1 AND (?2 IS NULL OR m.account_id = ?2)
-             ORDER BY m.date DESC LIMIT ?3"
+             WHERE messages_fts MATCH ?1 AND (?2 IS NULL OR m.account_id = ?2) AND (?3 IS NULL OR m.folder_id = ?3)
+             ORDER BY m.date DESC LIMIT ?4"
         ))?;
-        let rows = st.query_map(params![terms.join(" "), account_id, limit as i64], summary_row)?;
+        let rows = st.query_map(params![terms.join(" "), account_id, folder_id, limit as i64], summary_row)?;
         rows.collect()
     }
 
@@ -651,12 +692,53 @@ mod tests {
         s.sync_folders("a", &[rec("INBOX", FolderRole::Inbox, None)]).unwrap();
         let ids = s.insert_messages("a", "a:INBOX", &[msg(1, "Invoice October", false), msg(2, "Lunch", false)]).unwrap();
         s.set_raw(ids[1], b"raw", "let's get tacos at noon").unwrap();
-        assert_eq!(s.search("invoice", None, 10).unwrap().len(), 1);
-        assert_eq!(s.search("taco", None, 10).unwrap()[0].subject, "Lunch");
-        assert_eq!(s.search("perez", Some("a"), 10).unwrap().len(), 2);
-        assert!(s.search("perez", Some("b"), 10).unwrap().is_empty());
+        assert_eq!(s.search("invoice", None, None, 10).unwrap().len(), 1);
+        assert_eq!(s.search("taco", None, None, 10).unwrap()[0].subject, "Lunch");
+        assert_eq!(s.search("perez", Some("a"), None, 10).unwrap().len(), 2);
+        assert!(s.search("perez", Some("b"), None, 10).unwrap().is_empty());
         s.remove_message(ids[1]).unwrap();
-        assert!(s.search("taco", None, 10).unwrap().is_empty());
+        assert!(s.search("taco", None, None, 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn search_within_a_folder() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.sync_folders("a", &[rec("INBOX", FolderRole::Inbox, None), rec("Work", FolderRole::Other, None)]).unwrap();
+        s.insert_messages("a", "a:INBOX", &[msg(1, "Invoice inbox", false)]).unwrap();
+        s.insert_messages("a", "a:Work", &[msg(1, "Invoice work", false)]).unwrap();
+        assert_eq!(s.search("invoice", None, None, 10).unwrap().len(), 2);
+        let hits = s.search("invoice", None, Some("a:Work"), 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].subject, "Invoice work");
+    }
+
+    #[test]
+    fn renaming_a_folder_tree_keeps_its_messages() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.sync_folders(
+            "a",
+            &[
+                rec("INBOX", FolderRole::Inbox, None),
+                rec("Projects", FolderRole::Other, None),
+                rec("Projects/Moho", FolderRole::Other, Some("Projects")),
+                rec("ProjectsOld", FolderRole::Other, None),
+            ],
+        )
+        .unwrap();
+        s.insert_messages("a", "a:Projects/Moho", &[msg(1, "x", false), msg(2, "y", true)]).unwrap();
+        assert_eq!(s.subtree_paths("a", "Projects", "/").unwrap(), ["Projects", "Projects/Moho"]);
+
+        s.rename_folder_tree("a", "Projects", "INBOX/Work", "/").unwrap();
+        assert_eq!(s.messages("a:INBOX/Work/Moho", 10).unwrap().len(), 2);
+        assert_eq!(s.folder_path("a:INBOX/Work/Moho").unwrap(), Some(("a".into(), "INBOX/Work/Moho".into())));
+        // A sibling that merely shares the prefix is left alone.
+        assert!(s.folder_path("a:ProjectsOld").unwrap().is_some());
+        let inbox = s.folders("a").unwrap().into_iter().find(|f| f.path == "INBOX").unwrap();
+        assert_eq!(inbox.children[0].path, "INBOX/Work");
+        assert_eq!(inbox.children[0].children[0].unread, 1);
+
+        s.mark_folder_read("a:INBOX/Work/Moho").unwrap();
+        assert!(s.messages("a:INBOX/Work/Moho", 10).unwrap().iter().all(|m| !m.unread));
     }
 
     #[test]

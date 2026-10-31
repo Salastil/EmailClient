@@ -9,6 +9,7 @@
     threads,
     searchResults = null,
     searchQuery = '',
+    searchIn = null,
     loading = false,
     selected,
     width,
@@ -21,6 +22,8 @@
     threads: ThreadNode[];
     searchResults?: MessageSummary[] | null;
     searchQuery?: string;
+    /** Name of the folder the search is limited to. */
+    searchIn?: string | null;
     loading?: boolean;
     selected: string | null;
     width: number;
@@ -61,7 +64,7 @@
   <header>
     {#if searchResults}
       <span class="folder">Search</span>
-      <span class="count">{searchResults.length} results for “{searchQuery}”</span>
+      <span class="count">{searchResults.length} results for “{searchQuery}”{searchIn ? ` in ${searchIn}` : ''}</span>
       <span class="spacer"></span>
       <button class="icon-btn" title="Clear search" onclick={onclearsearch}><Icon name="close" /></button>
     {:else}

@@ -78,8 +78,13 @@ pub fn list_threads(folder_id: String, engine: State<SharedEngine>) -> CmdResult
 }
 
 #[tauri::command]
-pub fn search(query: String, account_id: Option<String>, engine: State<SharedEngine>) -> CmdResult<Vec<MessageSummary>> {
-    engine.store.lock().unwrap().search(&query, account_id.as_deref(), 200).map_err(err)
+pub fn search(
+    query: String,
+    account_id: Option<String>,
+    folder_id: Option<String>,
+    engine: State<SharedEngine>,
+) -> CmdResult<Vec<MessageSummary>> {
+    engine.store.lock().unwrap().search(&query, account_id.as_deref(), folder_id.as_deref(), 200).map_err(err)
 }
 
 #[derive(Serialize)]

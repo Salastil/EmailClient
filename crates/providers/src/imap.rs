@@ -391,6 +391,76 @@ pub async fn append(session: &mut Session, path: &str, flags: &str, raw: &[u8]) 
     Ok(())
 }
 
+// ----- folder management --------------------------------------------------------
+
+/// The server's hierarchy delimiter (usually "/" or ".").
+pub async fn delimiter(session: &mut Session) -> Result<String> {
+    let names: Vec<_> = session.list(Some(""), Some("")).await?.try_collect().await?;
+    Ok(names.first().and_then(|n| n.delimiter()).filter(|d| !d.is_empty()).unwrap_or("/").to_string())
+}
+
+/// Server path for a mailbox called `name` (as typed) under `parent`, or at the top level.
+pub fn child_path(parent: Option<&str>, name: &str, delim: &str) -> Result<String> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(Error::Other("the folder name is empty".into()));
+    }
+    if name.contains(delim) {
+        return Err(Error::Other(format!("folder names cannot contain “{delim}”")));
+    }
+    let leaf = utf7::encode(name);
+    Ok(match parent {
+        Some(p) => format!("{p}{delim}{leaf}"),
+        None => leaf,
+    })
+}
+
+/// The last component of a server path.
+pub fn leaf(path: &str, delim: &str) -> String {
+    path.rsplit_once(delim).map_or(path, |(_, l)| l).to_string()
+}
+
+pub async fn create_folder(session: &mut Session, path: &str) -> Result<()> {
+    session.create(path).await?;
+    Ok(())
+}
+
+/// Make sure no folder we are about to delete or rename is the selected one:
+/// servers like Dovecot drop the connection when the selected mailbox goes away.
+/// EXAMINE is read-only, unlike CLOSE, which would expunge deleted messages.
+async fn deselect(session: &mut Session) -> Result<()> {
+    session.examine("INBOX").await?;
+    Ok(())
+}
+
+pub async fn delete_folder(session: &mut Session, path: &str) -> Result<()> {
+    deselect(session).await?;
+    session.delete(path).await?;
+    Ok(())
+}
+
+pub async fn rename_folder(session: &mut Session, from: &str, to: &str) -> Result<()> {
+    deselect(session).await?;
+    session.rename(from, to).await?;
+    Ok(())
+}
+
+/// Mark every message in a mailbox read.
+pub async fn mark_all_seen(session: &mut Session, path: &str) -> Result<()> {
+    if session.select(path).await?.exists > 0 {
+        let _: Vec<Fetch> = session.uid_store("1:*", "+FLAGS.SILENT (\\Seen)").await?.try_collect().await?;
+    }
+    Ok(())
+}
+
+/// Copy every message of mailbox `from` into the existing mailbox `to`.
+pub async fn copy_all(session: &mut Session, from: &str, to: &str) -> Result<()> {
+    if session.select(from).await?.exists > 0 {
+        session.uid_copy("1:*", to).await?;
+    }
+    Ok(())
+}
+
 /// Wait on INBOX with IDLE until something changes or `timeout` passes.
 /// Returns the session and whether the server reported new data.
 pub async fn idle(mut session: Session, path: &str, timeout: Duration) -> Result<(Session, bool)> {

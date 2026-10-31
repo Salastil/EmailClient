@@ -1,6 +1,7 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
   import FolderItem from './FolderItem.svelte';
+  import FolderMenu from './FolderMenu.svelte';
   import type { Account, Folder } from '../lib/types';
 
   let {
@@ -12,6 +13,11 @@
     oncompose,
     onsync,
     onreauth,
+    favorites,
+    ontogglefavorite,
+    onsearchin,
+    onfolderschanged,
+    notify,
   }: {
     account: Account | null;
     folders: Folder[];
@@ -21,7 +27,25 @@
     oncompose: () => void;
     onsync: () => void;
     onreauth: () => void;
+    /** Folder ids the user pinned to Favorites. */
+    favorites: string[];
+    ontogglefavorite: (f: Folder) => void;
+    onsearchin: (f: Folder) => void;
+    onfolderschanged: (selectId: string | null) => void;
+    notify: (text: string, error?: boolean) => void;
   } = $props();
+
+  let menu = $state<{ folder: Folder; x: number; y: number } | null>(null);
+
+  function openMenu(e: MouseEvent, f: Folder) {
+    e.preventDefault();
+    e.stopPropagation();
+    menu = { folder: f, x: e.clientX, y: e.clientY };
+  }
+
+  function flat(list: Folder[]): Folder[] {
+    return list.flatMap((f) => [f, ...flat(f.children)]);
+  }
 
   const status = $derived.by(() => {
     const st = account?.status;
@@ -36,7 +60,14 @@
 
   const FAVORITES = ['inbox', 'starred', 'sent', 'drafts', 'archive', 'spam', 'trash'];
   let sections = $derived([
-    { key: 'favorites', title: 'Favorites', items: folders.filter((f) => FAVORITES.includes(f.role)) },
+    {
+      key: 'favorites',
+      title: 'Favorites',
+      items: [
+        ...folders.filter((f) => FAVORITES.includes(f.role)),
+        ...flat(folders).filter((f) => !FAVORITES.includes(f.role) && favorites.includes(f.id)),
+      ],
+    },
     { key: 'folders', title: 'Folders', items: folders.filter((f) => f.role === 'other') },
     { key: 'labels', title: 'Labels', items: folders.filter((f) => f.role === 'label') },
   ].filter((s) => s.items.length));
@@ -61,11 +92,30 @@
       </button>
       {#if !collapsed[s.key]}
         {#each s.items as f (f.id)}
-          <FolderItem folder={f} {selected} {onselect} />
+          <FolderItem folder={f} {selected} {onselect} onmenu={openMenu} nested={s.key !== 'favorites' || FAVORITES.includes(f.role)} />
         {/each}
       {/if}
     {/each}
   </div>
+
+  {#if menu}
+    {#key menu}
+      <FolderMenu
+        folder={menu.folder}
+        {folders}
+        {account}
+        x={menu.x}
+        y={menu.y}
+        favorite={favorites.includes(menu.folder.id)}
+        pinnedByRole={FAVORITES.includes(menu.folder.role)}
+        onclose={() => (menu = null)}
+        onsearch={onsearchin}
+        {ontogglefavorite}
+        onchanged={onfolderschanged}
+        {notify}
+      />
+    {/key}
+  {/if}
 
   {#if account}
     {#if account.status.state === 'needs_auth'}

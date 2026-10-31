@@ -75,6 +75,8 @@ pub struct Settings {
     pub oauth_clients: HashMap<String, OAuthClient>,
     /// Account order in the rail.
     pub account_order: Vec<String>,
+    /// Folder ids the user pinned to Favorites (special folders are there anyway).
+    pub favorite_folders: Vec<String>,
 }
 
 /// Write atomically (temp file + rename) so a crash never leaves a torn file.
