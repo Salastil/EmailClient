@@ -182,7 +182,7 @@
       <iframe
         bind:this={frame}
         title="Message body"
-        sandbox="allow-same-origin"
+        sandbox="allow-same-origin allow-popups allow-popups-to-escape-sandbox"
         srcdoc={doc}
         style:height="{frameHeight}px"
         onload={onFrameLoad}

@@ -57,6 +57,23 @@ pub fn run() {
                 .min_inner_size(900.0, 560.0)
                 .data_directory(webview_dir.clone())
                 .visible(false)
+                // Links in a message body open in a new window (`<base target="_blank">`).
+                // WebKitGTK runs no listeners inside the script-less iframe, so the
+                // reader cannot catch the click; hand the popup to the default browser.
+                .on_new_window({
+                    let handle = app.handle().clone();
+                    move |url, _| {
+                        if matches!(url.scheme(), "http" | "https" | "mailto") {
+                            let handle = handle.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(e) = launch::open_url(&handle, url.as_str()).await {
+                                    tracing::warn!("{e}");
+                                }
+                            });
+                        }
+                        tauri::webview::NewWindowResponse::Deny
+                    }
+                })
                 .build()?;
 
             let handle = app.handle().clone();
