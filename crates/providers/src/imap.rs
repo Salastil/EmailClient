@@ -349,6 +349,24 @@ pub async fn fetch_raw(session: &mut Session, path: &str, uid: u32) -> Result<Ve
         .ok_or_else(|| Error::Protocol("message no longer exists on the server".into()))
 }
 
+/// Download several full messages at once, skipping any larger than
+/// `max_size` bytes. Returns (uid, message) for what was fetched.
+pub async fn fetch_raws(session: &mut Session, path: &str, uids: &[u32], max_size: u32) -> Result<Vec<(u32, Vec<u8>)>> {
+    if uids.is_empty() {
+        return Ok(vec![]);
+    }
+    session.examine(path).await?;
+    let set = |uids: &[u32]| uids.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+    let sizes: Vec<Fetch> = session.uid_fetch(set(uids), "(UID RFC822.SIZE)").await?.try_collect().await?;
+    let wanted: Vec<u32> = sizes.iter().filter(|f| f.size.is_some_and(|s| s <= max_size)).filter_map(|f| f.uid).collect();
+    let mut out = Vec::new();
+    for chunk in wanted.chunks(25) {
+        let msgs: Vec<Fetch> = session.uid_fetch(set(chunk), "(UID BODY.PEEK[])").await?.try_collect().await?;
+        out.extend(msgs.iter().filter_map(|m| Some((m.uid?, m.body()?.to_vec()))));
+    }
+    Ok(out)
+}
+
 pub async fn store_flag(session: &mut Session, path: &str, uid: u32, flag: &str, on: bool) -> Result<()> {
     session.select(path).await?;
     let op = if on { "+FLAGS.SILENT" } else { "-FLAGS.SILENT" };

@@ -133,3 +133,30 @@ async fn copy_a_message_and_keep_the_original() {
     imap::expunge_message(&mut s, "INBOX", uid).await.unwrap();
     imap::delete_folder(&mut s, &dest).await.unwrap();
 }
+
+#[tokio::test]
+async fn fetch_several_messages_and_skip_large_ones() {
+    let Some(server) = server() else {
+        eprintln!("MOHO_TEST_IMAP not set; skipping");
+        return;
+    };
+    let mut s = imap::connect(&server, &creds()).await.unwrap();
+    let before: std::collections::HashSet<u32> = imap::server_uids(&mut s, "INBOX").await.unwrap().into_iter().collect();
+    imap::append(&mut s, "INBOX", "()", &mail("small-1@x", "Small one")).await.unwrap();
+    imap::append(&mut s, "INBOX", "()", &mail("small-2@x", "Small two")).await.unwrap();
+    let mut big = mail("big@x", "Big");
+    big.extend(std::iter::repeat_n(b'x', 20_000));
+    imap::append(&mut s, "INBOX", "()", &big).await.unwrap();
+    let new: Vec<u32> = imap::server_uids(&mut s, "INBOX").await.unwrap().into_iter().filter(|u| !before.contains(u)).collect();
+    assert_eq!(new.len(), 3);
+
+    let got = imap::fetch_raws(&mut s, "INBOX", &new, 10_000).await.unwrap();
+    let subjects: Vec<String> = got.iter().map(|(_, raw)| String::from_utf8_lossy(raw).into_owned()).collect();
+    assert_eq!(got.len(), 2, "the 20 kB message is skipped");
+    assert!(subjects.iter().any(|m| m.contains("Small one")) && subjects.iter().any(|m| m.contains("Small two")));
+    assert_eq!(imap::fetch_raws(&mut s, "INBOX", &new, u32::MAX).await.unwrap().len(), 3);
+
+    for uid in new {
+        imap::expunge_message(&mut s, "INBOX", uid).await.unwrap();
+    }
+}

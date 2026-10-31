@@ -492,12 +492,47 @@ impl Store {
             .optional()
     }
 
+    /// The cached full message, or a cached copy of the same message in
+    /// another folder (Gmail keeps one per label).
     pub fn raw(&self, id: i64) -> Result<Option<Vec<u8>>> {
         Ok(self
             .conn
-            .query_row("SELECT raw FROM messages WHERE id = ?1", [id], |r| r.get::<_, Option<Vec<u8>>>(0))
+            .query_row(
+                "SELECT COALESCE(m.raw, (SELECT o.raw FROM messages o
+                     WHERE o.account_id = m.account_id AND o.message_id = m.message_id
+                       AND m.message_id != '' AND o.raw IS NOT NULL LIMIT 1))
+                 FROM messages m WHERE m.id = ?1",
+                [id],
+                |r| r.get::<_, Option<Vec<u8>>>(0),
+            )
             .optional()?
             .flatten())
+    }
+
+    /// Drop cached full messages beyond the newest `keep` in each of the
+    /// account's folders. Headers and the search index stay; a dropped message
+    /// is downloaded again when opened.
+    pub fn cull_raw(&mut self, account_id: &str, keep: usize) -> Result<usize> {
+        self.conn.execute(
+            "UPDATE messages SET raw = NULL WHERE raw IS NOT NULL AND id IN (
+                 SELECT id FROM (SELECT id, ROW_NUMBER() OVER (PARTITION BY folder_id ORDER BY date DESC) AS n
+                                 FROM messages WHERE account_id = ?1)
+                 WHERE n > ?2)",
+            params![account_id, keep as i64],
+        )
+    }
+
+    /// The newest `limit` messages of a folder, as (id, uid), whose full
+    /// message is not cached here or in another folder.
+    pub fn uncached(&self, folder_id: &str, limit: usize) -> Result<Vec<(i64, u32)>> {
+        let mut st = self.conn.prepare(
+            "SELECT m.id, m.uid FROM (SELECT * FROM messages WHERE folder_id = ?1 ORDER BY date DESC LIMIT ?2) m
+             WHERE m.raw IS NULL AND NOT EXISTS (
+                 SELECT 1 FROM messages o WHERE o.account_id = m.account_id AND o.message_id = m.message_id
+                   AND m.message_id != '' AND o.raw IS NOT NULL)",
+        )?;
+        let rows = st.query_map(params![folder_id, limit as i64], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        rows.collect()
     }
 
     /// Cache the full message and index its text for search.
@@ -693,6 +728,26 @@ mod tests {
         assert_eq!(s.unread_in("a", &both).unwrap(), 2);
         assert_eq!(s.unread_in("a", &both[1..]).unwrap(), 1);
         assert_eq!(s.unread_in("a", &[]).unwrap(), 0);
+    }
+
+    #[test]
+    fn body_cache_is_shared_between_folders_and_capped() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.sync_folders("a", &[rec("INBOX", FolderRole::Inbox, None), rec("[Gmail]/Important", FolderRole::Important, None)])
+            .unwrap();
+        let inbox = s.insert_messages("a", "a:INBOX", &[msg(1, "old", true), msg(2, "mid", true), msg(3, "new", true)]).unwrap();
+        let important = s.insert_messages("a", "a:[Gmail]/Important", &[msg(3, "new", true)]).unwrap();
+        // Newest first, and only what isn't cached anywhere.
+        assert_eq!(s.uncached("a:INBOX", 2).unwrap().iter().map(|(_, u)| *u).collect::<Vec<_>>(), [3, 2]);
+        s.set_raw(inbox[2], b"Subject: new\r\n\r\nbody", "body").unwrap();
+        assert!(s.uncached("a:[Gmail]/Important", 10).unwrap().is_empty());
+        assert_eq!(s.raw(important[0]).unwrap().as_deref(), Some(&b"Subject: new\r\n\r\nbody"[..]));
+
+        s.set_raw(inbox[0], b"old", "old").unwrap();
+        s.set_raw(inbox[1], b"mid", "mid").unwrap();
+        assert_eq!(s.cull_raw("a", 2).unwrap(), 1);
+        assert!(s.raw(inbox[0]).unwrap().is_none());
+        assert!(s.raw(inbox[1]).unwrap().is_some() && s.raw(inbox[2]).unwrap().is_some());
     }
 
     #[test]

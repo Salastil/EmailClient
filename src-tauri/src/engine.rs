@@ -24,6 +24,11 @@ use crate::state::AppState;
 
 /// Re-sync every folder this often even when IDLE stays quiet.
 const FULL_SYNC_EVERY: Duration = Duration::from_secs(10 * 60);
+/// How many of the newest messages per watched folder to download ahead; the
+/// cache keeps no more than this many full messages per folder.
+const PREFETCH_NEWEST: usize = 200;
+/// Larger messages (big attachments) are only downloaded when opened.
+const PREFETCH_MAX_SIZE: u32 = 2 * 1024 * 1024;
 /// Servers drop IDLE after 30 minutes; renew well before.
 const IDLE_TIMEOUT: Duration = Duration::from_secs(9 * 60);
 
@@ -346,6 +351,8 @@ impl Engine {
                 .unwrap()
                 .folder_by_role(&cfg.id, FolderRole::Inbox)?
                 .unwrap_or_else(|| "INBOX".into());
+            let paths = self.watched_paths(&cfg.id, &inbox);
+            self.prefetch(&mut session, &cfg.id, &paths).await;
             while started.elapsed() < FULL_SYNC_EVERY {
                 if stopped() {
                     let _ = session.logout().await;
@@ -356,25 +363,64 @@ impl Engine {
                 match outcome {
                     IdleOutcome::NewData => {
                         // Important folders too, so the tray catches up right away.
-                        let mut paths = vec![inbox.clone()];
-                        let important = {
-                            let store = self.store.lock().unwrap();
-                            important_folders(&store, &self.app.state::<AppState>().settings(), &cfg.id)
-                        };
-                        let prefix = format!("{}:", cfg.id);
-                        for path in important.iter().filter_map(|id| id.strip_prefix(&prefix)) {
-                            if !paths.iter().any(|p| p == path) {
-                                paths.push(path.to_string());
-                            }
-                        }
+                        let paths = self.watched_paths(&cfg.id, &inbox);
                         let r = imap::sync_paths(&mut session, &cfg.id, &self.store, &paths).await?;
                         if r.changed {
                             self.emit_changed(&cfg.id);
                         }
                         self.handle_new(&cfg.id, &r.new_messages);
+                        self.prefetch(&mut session, &cfg.id, &paths).await;
                     }
                     IdleOutcome::Woken => break,
                     IdleOutcome::Timeout => {}
+                }
+            }
+        }
+    }
+
+    /// The Inbox and the account's important folders, as mailbox paths.
+    fn watched_paths(&self, account_id: &str, inbox: &str) -> Vec<String> {
+        let important = {
+            let store = self.store.lock().unwrap();
+            important_folders(&store, &self.app.state::<AppState>().settings(), account_id)
+        };
+        let prefix = format!("{account_id}:");
+        let mut paths = vec![inbox.to_string()];
+        for path in important.iter().filter_map(|id| id.strip_prefix(&prefix)) {
+            if !paths.iter().any(|p| p == path) {
+                paths.push(path.to_string());
+            }
+        }
+        paths
+    }
+
+    /// Download the newest messages of `paths` ahead of time, so opening one
+    /// is instant instead of a round trip to the server.
+    async fn prefetch(&self, session: &mut Session, account_id: &str, paths: &[String]) {
+        // Keep the cache at the newest PREFETCH_NEWEST bodies per folder.
+        if let Err(e) = self.store.lock().unwrap().cull_raw(account_id, PREFETCH_NEWEST) {
+            tracing::warn!("trimming the message cache: {e}");
+        }
+        for path in paths {
+            let fid = folder_id(account_id, path);
+            let wanted = match self.store.lock().unwrap().uncached(&fid, PREFETCH_NEWEST) {
+                Ok(w) if !w.is_empty() => w,
+                _ => continue,
+            };
+            let uids: Vec<u32> = wanted.iter().map(|(_, uid)| *uid).collect();
+            let fetched = match imap::fetch_raws(session, path, &uids, PREFETCH_MAX_SIZE).await {
+                Ok(f) => f,
+                Err(e) => {
+                    tracing::warn!("prefetching {path}: {e}");
+                    return;
+                }
+            };
+            let by_uid: HashMap<u32, i64> = wanted.into_iter().map(|(id, uid)| (uid, id)).collect();
+            for (uid, raw) in fetched {
+                let Some(&id) = by_uid.get(&uid) else { continue };
+                let text = mail_core::parse::index_text(&mail_core::parse::parse_message(&raw));
+                if let Err(e) = self.store.lock().unwrap().set_raw(id, &raw, &text) {
+                    tracing::warn!("caching message {id}: {e}");
                 }
             }
         }
