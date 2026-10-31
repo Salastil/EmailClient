@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>moho-mail</id>
+  <name>Moho Mail</name>
+  <summary>Email and calendar client</summary>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <description>
+    <p>
+      A Linux email client with a four-column layout: accounts, folders,
+      threaded conversations and the reader. It supports Gmail, Outlook,
+      cock.li, Proton Mail and any IMAP provider, plus CalDAV calendars.
+    </p>
+  </description>
+  <launchable type="desktop-id">moho-mail.desktop</launchable>
+  <url type="homepage">https://github.com/salastil/emailclient</url>
+  <provides>
+    <binary>moho-mail</binary>
+  </provides>
+  <categories>
+    <category>Email</category>
+  </categories>
+</component>

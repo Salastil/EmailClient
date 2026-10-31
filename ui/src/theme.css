@@ -1,0 +1,122 @@
+/* Material Design 3 tokens, dark scheme tuned to match Moho. */
+:root {
+  color-scheme: dark;
+  --md-sys-color-primary: #4dabf7;
+  --md-sys-color-on-primary: #002b4a;
+  --md-sys-color-primary-container: #19324a;
+  --md-sys-color-on-primary-container: #cfe5ff;
+  --md-sys-color-secondary: #8fd19e;
+  --md-sys-color-error: #f23f42;
+  --md-sys-color-on-error: #ffffff;
+  --md-sys-color-surface: #121417;
+  --md-sys-color-surface-container-lowest: #0f1114;
+  --md-sys-color-surface-container-low: #16191d;
+  --md-sys-color-surface-container: #1b1e23;
+  --md-sys-color-surface-container-high: #23272d;
+  --md-sys-color-surface-container-highest: #2c3037;
+  --md-sys-color-on-surface: #e3e5e8;
+  --md-sys-color-on-surface-variant: #9aa1a9;
+  --md-sys-color-outline: #3a3f46;
+  --md-sys-color-outline-variant: #262a30;
+  --md-sys-color-scrim: rgb(0 0 0 / 0.55);
+
+  --md-sys-shape-corner-small: 6px;
+  --md-sys-shape-corner-medium: 12px;
+  --md-sys-shape-corner-large: 16px;
+  --md-sys-shape-corner-full: 999px;
+
+  --md-sys-state-hover: rgb(255 255 255 / 0.06);
+  --md-sys-state-selected: rgb(77 171 247 / 0.14);
+
+  --font: 'Noto Sans', 'Inter', system-ui, sans-serif;
+  --mono: 'Noto Sans Mono', ui-monospace, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body, #app {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
+  font: 14px/1.4 var(--font);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+input, select, textarea {
+  font: inherit;
+  color: inherit;
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--md-sys-color-surface-container-highest);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-track { background: transparent; }
+
+.material-symbols-rounded {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+  user-select: none;
+}
+
+.icon-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--md-sys-shape-corner-full);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.icon-btn:hover { background: var(--md-sys-state-hover); color: var(--md-sys-color-on-surface); }
+
+.filled-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 16px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  font-weight: 600;
+}
+.filled-btn:hover { filter: brightness(1.08); }
+.filled-btn:disabled { opacity: 0.5; cursor: default; }
+
+.tonal-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-surface-container-highest);
+}
+.tonal-btn:hover { filter: brightness(1.15); }
+
+.badge {
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: var(--md-sys-shape-corner-full);
+  background: var(--md-sys-color-error);
+  color: var(--md-sys-color-on-error);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+}

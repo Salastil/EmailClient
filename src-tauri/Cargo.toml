@@ -1,0 +1,24 @@
+[package]
+name = "moho-mail"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Moho Mail: a Linux email and calendar client"
+
+[lib]
+name = "moho_mail_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+mail-core = { path = "../crates/mail-core" }
+tauri = { version = "2", features = ["image-png"] }
+tauri-plugin-notification = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+ksni = { version = "0.3", features = ["blocking"] }
+serde.workspace = true
+serde_json.workspace = true
+chrono.workspace = true

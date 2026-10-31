@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Moho Mail
+GenericName=Email Client
+Comment=Read email and manage your calendar
+Exec=moho-mail %u
+Icon=moho-mail
+Terminal=false
+Categories=Network;Email;Calendar;Office;
+Keywords=email;mail;imap;calendar;caldav;proton;gmail;
+MimeType=x-scheme-handler/mailto;
+StartupNotify=true
+StartupWMClass=moho-mail

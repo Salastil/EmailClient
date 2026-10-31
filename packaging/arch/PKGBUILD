@@ -1,0 +1,49 @@
+# Maintainer: Salastil <https://github.com/salastil>
+pkgname=moho-mail
+pkgver=0.1.0
+pkgrel=1
+pkgdesc='Email and calendar client with a four-column layout (Tauri + WebKitGTK)'
+arch=('x86_64' 'aarch64')
+url='https://github.com/salastil/emailclient'
+license=('GPL-3.0-or-later')
+depends=('webkit2gtk-4.1' 'gtk3' 'libsecret' 'openssl' 'dbus' 'hicolor-icon-theme')
+makedepends=('rust' 'cargo' 'pnpm' 'nodejs')
+options=('!lto')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+_srcdir="emailclient-$pkgver"
+
+prepare() {
+  cd "$_srcdir"
+  export CARGO_HOME="$srcdir/cargo-home"
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+  pnpm install --frozen-lockfile
+}
+
+build() {
+  cd "$_srcdir"
+  export CARGO_HOME="$srcdir/cargo-home"
+  export CARGO_TARGET_DIR=target
+  pnpm tauri build --no-bundle
+}
+
+check() {
+  cd "$_srcdir"
+  export CARGO_HOME="$srcdir/cargo-home"
+  cargo test --frozen -p mail-core
+}
+
+package() {
+  cd "$_srcdir"
+  install -Dm755 target/release/moho-mail "$pkgdir/usr/bin/moho-mail"
+  install -Dm644 packaging/linux/moho-mail.desktop "$pkgdir/usr/share/applications/moho-mail.desktop"
+  install -Dm644 packaging/linux/moho-mail.metainfo.xml "$pkgdir/usr/share/metainfo/moho-mail.metainfo.xml"
+  install -Dm644 packaging/linux/moho-mail.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/moho-mail.svg"
+  local size
+  for size in 32 64 128; do
+    install -Dm644 "src-tauri/icons/${size}x${size}.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/moho-mail.png"
+  done
+  install -Dm644 src-tauri/icons/128x128@2x.png "$pkgdir/usr/share/icons/hicolor/256x256/apps/moho-mail.png"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
