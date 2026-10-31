@@ -408,6 +408,7 @@ impl Store {
                         role: role_from(&r.get::<_, String>(4)?),
                         total: r.get(5)?,
                         unread: r.get(6)?,
+                        important: false,
                         children: vec![],
                     },
                     r.get(3)?,
@@ -424,6 +425,21 @@ impl Store {
             params![account_id, role_str(role)],
             |r| r.get(0),
         )
+    }
+
+    /// Unread messages across the given folders, counting a message that sits
+    /// in several of them (Gmail labels) once.
+    pub fn unread_in(&self, account_id: &str, folder_ids: &[String]) -> Result<u32> {
+        if folder_ids.is_empty() {
+            return Ok(0);
+        }
+        let marks = vec!["?"; folder_ids.len()].join(",");
+        let sql = format!(
+            "SELECT COUNT(DISTINCT CASE WHEN message_id = '' THEN 'id:' || id ELSE message_id END)
+             FROM messages WHERE account_id = ? AND unread AND folder_id IN ({marks})"
+        );
+        let args = std::iter::once(account_id).chain(folder_ids.iter().map(String::as_str));
+        self.conn.query_row(&sql, rusqlite::params_from_iter(args), |r| r.get(0))
     }
 
     pub fn messages(&self, folder_id: &str, limit: usize) -> Result<Vec<MessageSummary>> {
@@ -663,6 +679,20 @@ mod tests {
         // A folder that disappears from the server is removed with its messages.
         s.sync_folders("a", &[rec("Projects", FolderRole::Other, None)]).unwrap();
         assert!(s.messages("a:INBOX", 10).unwrap().is_empty());
+    }
+
+    #[test]
+    fn unread_across_folders_counts_each_message_once() {
+        let mut s = Store::open_in_memory().unwrap();
+        s.sync_folders("a", &[rec("INBOX", FolderRole::Inbox, None), rec("[Gmail]/Important", FolderRole::Important, None)])
+            .unwrap();
+        s.insert_messages("a", "a:INBOX", &[msg(1, "both", false), msg(2, "inbox only", false), msg(3, "read", true)])
+            .unwrap();
+        s.insert_messages("a", "a:[Gmail]/Important", &[msg(1, "both", false)]).unwrap();
+        let both = ["a:INBOX".to_string(), "a:[Gmail]/Important".to_string()];
+        assert_eq!(s.unread_in("a", &both).unwrap(), 2);
+        assert_eq!(s.unread_in("a", &both[1..]).unwrap(), 1);
+        assert_eq!(s.unread_in("a", &[]).unwrap(), 0);
     }
 
     #[test]

@@ -98,6 +98,7 @@ fn role_for(path: &str, attrs: &[NameAttribute]) -> FolderRole {
             NameAttribute::Archive => FolderRole::Archive,
             NameAttribute::All => FolderRole::All,
             NameAttribute::Flagged => FolderRole::Starred,
+            NameAttribute::Extension(e) if e.eq_ignore_ascii_case("\\Important") => FolderRole::Important,
             _ => continue,
         };
         return r;

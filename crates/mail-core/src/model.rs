@@ -56,6 +56,8 @@ pub enum FolderRole {
     Spam,
     Trash,
     All,
+    /// Gmail's Important folder (`\Important` special use).
+    Important,
     Label,
     Other,
 }
@@ -70,6 +72,10 @@ pub struct Folder {
     pub role: FolderRole,
     pub unread: u32,
     pub total: u32,
+    /// Monitored as important: notifications in "Important only" mode and the
+    /// tray's unread state follow these folders.
+    #[serde(default)]
+    pub important: bool,
     #[serde(default)]
     pub children: Vec<Folder>,
 }

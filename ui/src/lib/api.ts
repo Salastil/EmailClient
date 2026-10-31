@@ -18,6 +18,8 @@ export const api = {
   copyFolder: (folderId: string, destId: string | null) => invoke<string>('copy_folder', { folderId, destId }),
   deleteFolder: (folderId: string) => invoke<'moved_to_trash' | 'deleted'>('delete_folder', { folderId }),
   markFolderRead: (folderId: string) => invoke<void>('mark_folder_read', { folderId }),
+  setFolderImportant: (folderId: string, important: boolean) =>
+    invoke<void>('set_folder_important', { folderId, important }),
   getMessage: (id: string, allowRemote = false) => invoke<MessageView>('get_message', { id, allowRemote }),
   openAttachment: (id: string, index: number) => invoke<void>('open_attachment', { id, index }),
   saveAttachment: (id: string, index: number) => invoke<string | null>('save_attachment', { id, index }),

@@ -121,6 +121,7 @@ pub fn run() {
             folders::copy_folder,
             folders::delete_folder,
             folders::mark_folder_read,
+            folders::set_folder_important,
             commands::send_message,
             commands::complete_address,
             commands::pick_attachments,

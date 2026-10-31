@@ -16,48 +16,104 @@ use crate::window;
 
 pub type TrayHandle = ksni::blocking::Handle<MohoTray>;
 
-const ICON_PNG: &[u8] = include_bytes!("../icons/64x64.png");
-
 pub struct MohoTray {
     app: AppHandle,
-    base_icon: Icon,
     pub unread: u32,
     pub paused: bool,
+    /// The desktop prefers a dark theme: draw the envelope light.
+    pub dark: bool,
 }
 
 pub fn spawn(app: AppHandle) -> Result<TrayHandle, ksni::Error> {
-    let tray = MohoTray { app, base_icon: decode_icon(ICON_PNG), unread: 0, paused: false };
-    tray.spawn()
+    let handle = MohoTray { app, unread: 0, paused: false, dark: true }.spawn()?;
+    tauri::async_runtime::spawn(follow_color_scheme(handle.clone()));
+    Ok(handle)
 }
 
-/// Convert PNG to the ARGB32 (network byte order) pixmap SNI expects.
-fn decode_icon(png: &[u8]) -> Icon {
-    let img = tauri::image::Image::from_bytes(png).expect("bundled tray icon is a valid PNG");
-    let mut data = img.rgba().to_vec();
-    for px in data.chunks_exact_mut(4) {
-        px.rotate_right(1);
+/// Track the desktop's light/dark preference (freedesktop appearance portal).
+async fn follow_color_scheme(tray: TrayHandle) {
+    use ashpd::desktop::settings::{ColorScheme, Settings};
+    use futures_util::StreamExt;
+
+    let apply = |scheme: ColorScheme| {
+        let tray = tray.clone();
+        // Blocking update off the async runtime; see refresh_tray.
+        tauri::async_runtime::spawn_blocking(move || {
+            tray.update(|t| t.dark = scheme != ColorScheme::PreferLight);
+        });
+    };
+    let Ok(settings) = Settings::new().await else {
+        tracing::info!("no appearance portal; the tray icon stays light");
+        return;
+    };
+    if let Ok(scheme) = settings.color_scheme().await {
+        apply(scheme);
     }
-    Icon { width: img.width() as i32, height: img.height() as i32, data }
+    let Ok(mut changes) = settings.receive_color_scheme_changed().await else { return };
+    while let Some(scheme) = changes.next().await {
+        apply(scheme);
+    }
 }
 
-/// Paint an unread dot in the top-right corner.
-fn with_badge(icon: &Icon) -> Icon {
-    let mut out = icon.clone();
-    let (w, h) = (out.width, out.height);
-    let r = w / 5;
-    let (cx, cy) = (w - r - 1, r + 1);
-    for y in 0..h {
-        for x in 0..w {
-            let d = (x - cx).pow(2) + (y - cy).pow(2);
-            if d <= r * r {
-                let i = ((y * w + x) * 4) as usize;
-                let rim = d > (r - 2).max(0).pow(2);
-                let rgb = if rim { [0x1e, 0x1f, 0x22] } else { [0xf2, 0x3f, 0x42] };
-                out.data[i..i + 4].copy_from_slice(&[0xff, rgb[0], rgb[1], rgb[2]]);
+/// Monochrome envelope in `ink`: an outline when everything is read, filled
+/// with a red dot when there is unread mail. Drawn on a 64-unit grid and
+/// supersampled so it stays crisp at any size.
+fn envelope(size: i32, unread: bool, ink: [u8; 3]) -> Icon {
+    fn segment(p: (f32, f32), a: (f32, f32), b: (f32, f32)) -> f32 {
+        let (pa, ba) = ((p.0 - a.0, p.1 - a.1), (b.0 - a.0, b.1 - a.1));
+        let t = ((pa.0 * ba.0 + pa.1 * ba.1) / (ba.0 * ba.0 + ba.1 * ba.1)).clamp(0.0, 1.0);
+        (pa.0 - ba.0 * t).hypot(pa.1 - ba.1 * t)
+    }
+    // Signed distance to the envelope body, a rounded rectangle.
+    fn body(p: (f32, f32)) -> f32 {
+        let (cx, cy, hw, hh, r) = (32.0, 35.0, 27.0, 19.0, 6.0);
+        let q = ((p.0 - cx).abs() - hw + r, (p.1 - cy).abs() - hh + r);
+        q.0.max(0.0).hypot(q.1.max(0.0)) + q.0.max(q.1).min(0.0) - r
+    }
+    let flap = |p| segment(p, (7.0, 18.0), (32.0, 37.0)).min(segment(p, (32.0, 37.0), (57.0, 18.0)));
+    let dot = (52.0, 14.0, 11.0);
+    let in_dot = |p: (f32, f32)| (p.0 - dot.0).hypot(p.1 - dot.1);
+
+    const SS: i32 = 4;
+    let scale = 64.0 / size as f32;
+    let mut data = Vec::with_capacity((size * size * 4) as usize);
+    for y in 0..size {
+        for x in 0..size {
+            let (mut env, mut red) = (0.0f32, 0.0f32);
+            for sy in 0..SS {
+                for sx in 0..SS {
+                    let p = (
+                        (x as f32 + (sx as f32 + 0.5) / SS as f32) * scale,
+                        (y as f32 + (sy as f32 + 0.5) / SS as f32) * scale,
+                    );
+                    if unread && in_dot(p) <= dot.2 {
+                        red += 1.0;
+                        continue;
+                    }
+                    // Leave a gap around the dot so it reads on any panel.
+                    if unread && in_dot(p) <= dot.2 + 3.5 {
+                        continue;
+                    }
+                    let d = body(p);
+                    let inked = if unread { d <= 0.0 && flap(p) > 2.5 } else { d.abs() <= 2.75 || (d < 0.0 && flap(p) <= 2.5) };
+                    if inked {
+                        env += 1.0;
+                    }
+                }
             }
+            let n = (SS * SS) as f32;
+            let (env, red) = (env / n, red / n);
+            let a = red + env;
+            let mix = |r: u8, i: u8| if a > 0.0 { ((r as f32 * red + i as f32 * env) / a).round() as u8 } else { 0 };
+            data.extend_from_slice(&[
+                (a * 255.0).round() as u8,
+                mix(0xe5, ink[0]),
+                mix(0x39, ink[1]),
+                mix(0x35, ink[2]),
+            ]);
         }
     }
-    out
+    Icon { width: size, height: size, data }
 }
 
 fn pause_for(app: &AppHandle, until: Option<chrono::DateTime<Local>>) {
@@ -73,17 +129,9 @@ impl ksni::Tray for MohoTray {
         "Moho Mail".into()
     }
 
-    fn icon_name(&self) -> String {
-        // Prefer the themed icon installed by the package; the pixmap is the fallback.
-        if self.unread == 0 { "moho-mail".into() } else { String::new() }
-    }
-
     fn icon_pixmap(&self) -> Vec<Icon> {
-        if self.unread == 0 {
-            vec![self.base_icon.clone()]
-        } else {
-            vec![with_badge(&self.base_icon)]
-        }
+        let ink = if self.dark { [0xf2, 0xf2, 0xf2] } else { [0x1f, 0x1f, 0x1f] };
+        [16, 22, 24, 32, 48, 64].into_iter().map(|size| envelope(size, self.unread > 0, ink)).collect()
     }
 
     fn tool_tip(&self) -> ToolTip {

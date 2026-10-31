@@ -77,6 +77,9 @@ pub struct Settings {
     pub account_order: Vec<String>,
     /// Folder ids the user pinned to Favorites (special folders are there anyway).
     pub favorite_folders: Vec<String>,
+    /// Folder ids monitored as important, per account id. An account missing
+    /// here uses the default: Gmail's Important folder, otherwise the Inbox.
+    pub important_folders: HashMap<String, Vec<String>>,
 }
 
 /// Write atomically (temp file + rename) so a crash never leaves a torn file.

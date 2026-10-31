@@ -142,6 +142,17 @@
     onclose();
   }
 
+  async function toggleImportant() {
+    menuOpen = false;
+    const on = !folder.important;
+    await run(
+      api.setFolderImportant(folder.id, on),
+      on ? `Monitoring “${folder.name}” as important` : `“${folder.name}” is no longer monitored`,
+    );
+    onchanged(null);
+    onclose();
+  }
+
   function finish(selectId: string | null) {
     dialog = null;
     onchanged(selectId);
@@ -221,6 +232,18 @@
       <button role="menuitemcheckbox" aria-checked={favorite} onmouseenter={() => (submenu = null)} onclick={() => { menuOpen = false; ontogglefavorite(folder); onclose(); }}>
         <Icon name="star" size={18} fill={favorite} /> Favorite folder
         {#if favorite}<span class="chev"><Icon name="check" size={18} /></span>{/if}
+      </button>
+    {/if}
+    {#if !virtual}
+      <button
+        role="menuitemcheckbox"
+        aria-checked={folder.important}
+        title="Notifications in “Important only” mode and the tray icon follow important folders"
+        onmouseenter={() => (submenu = null)}
+        onclick={toggleImportant}
+      >
+        <Icon name="label_important" size={18} fill={folder.important} /> Monitor as important
+        {#if folder.important}<span class="chev"><Icon name="check" size={18} /></span>{/if}
       </button>
     {/if}
     <hr />

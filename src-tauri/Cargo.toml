@@ -28,9 +28,10 @@ tracing = "0.1"
 url = "2"
 rand = "0.8"
 base64 = "0.22"
-ashpd = { version = "0.13", default-features = false, features = ["tokio", "open_uri"] }
+ashpd = { version = "0.13", default-features = false, features = ["tokio", "open_uri", "settings"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ksni = { version = "0.3", features = ["blocking"] }
+futures-util = "0.3"
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

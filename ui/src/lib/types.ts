@@ -3,7 +3,7 @@
 export type Provider = 'gmail' | 'outlook' | 'yahoo' | 'icloud' | 'fastmail' | 'cockli' | 'proton' | 'imap';
 export type NotifyMode = 'all' | 'important_only' | 'muted';
 export type FolderRole =
-  | 'inbox' | 'starred' | 'sent' | 'drafts' | 'archive' | 'spam' | 'trash' | 'all' | 'label' | 'other';
+  | 'inbox' | 'starred' | 'sent' | 'drafts' | 'archive' | 'spam' | 'trash' | 'all' | 'important' | 'label' | 'other';
 
 export type AccountStatus =
   | { state: 'idle' }
@@ -90,6 +90,8 @@ export interface Folder {
   role: FolderRole;
   unread: number;
   total: number;
+  /** Monitored as important (notifications and the tray follow it). */
+  important: boolean;
   children: Folder[];
 }
 
@@ -150,7 +152,6 @@ export interface Settings {
     quiet_hours: [number, number] | null;
     vip: string[];
     rules: { field: RuleField; contains: string }[];
-    use_provider_important: boolean;
     use_contacts: boolean;
     use_flagged: boolean;
     use_replied_threads: boolean;
@@ -160,6 +161,8 @@ export interface Settings {
   oauth_clients: Record<string, { client_id: string; client_secret: string | null }>;
   account_order: string[];
   favorite_folders: string[];
+  /** Per account; a missing account uses Gmail's Important folder or the Inbox. */
+  important_folders: Record<string, string[]>;
 }
 
 export interface ComposeInit {

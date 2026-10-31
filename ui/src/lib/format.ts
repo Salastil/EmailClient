@@ -48,6 +48,7 @@ export const folderIcon: Record<FolderRole, string> = {
   spam: 'report',
   trash: 'delete',
   all: 'stacks',
+  important: 'label_important',
   label: 'label',
   other: 'folder',
 };

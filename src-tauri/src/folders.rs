@@ -7,7 +7,7 @@ use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::commands::refresh_tray;
-use crate::engine::SharedEngine;
+use crate::engine::{important_folders, SharedEngine};
 use crate::state::AppState;
 
 type CmdResult<T> = Result<T, String>;
@@ -64,25 +64,31 @@ async fn finish(engine: &SharedEngine, app: &AppHandle, account_id: &str) -> Cmd
     Ok(())
 }
 
-/// Point favorites inside a moved folder at its new place, or drop them when
-/// `to` is None (the folder is gone).
-fn retarget_favorites(app: &AppHandle, account_id: &str, from: &str, to: Option<&str>, delim: &str) {
+/// Point favorites and important folders inside a moved folder at its new
+/// place, or drop them when `to` is None (the folder is gone).
+fn retarget_saved(app: &AppHandle, account_id: &str, from: &str, to: Option<&str>, delim: &str) {
     let state = app.state::<AppState>();
     let mut settings = state.settings();
     let (root, below) = (folder_id(account_id, from), folder_id(account_id, &format!("{from}{delim}")));
-    let before = settings.favorite_folders.clone();
-    settings.favorite_folders = before
-        .iter()
-        .filter_map(|id| {
-            if *id != root && !id.starts_with(&below) {
-                return Some(id.clone());
-            }
-            to.map(|to| format!("{}{}", folder_id(account_id, to), &id[root.len()..]))
-        })
-        .collect();
-    if settings.favorite_folders != before {
+    let retarget = |list: &[String]| -> Vec<String> {
+        list.iter()
+            .filter_map(|id| {
+                if *id != root && !id.starts_with(&below) {
+                    return Some(id.clone());
+                }
+                to.map(|to| format!("{}{}", folder_id(account_id, to), &id[root.len()..]))
+            })
+            .collect()
+    };
+    let before = settings.clone();
+    settings.favorite_folders = retarget(&settings.favorite_folders);
+    if let Some(ids) = settings.important_folders.get(account_id) {
+        let ids = retarget(ids);
+        settings.important_folders.insert(account_id.to_string(), ids);
+    }
+    if settings != before {
         if let Err(e) = settings.save(&state.paths.settings_file()) {
-            tracing::warn!("saving favorites: {e}");
+            tracing::warn!("saving folder settings: {e}");
         }
         *state.settings.lock().unwrap() = settings;
     }
@@ -103,7 +109,7 @@ async fn relocate(engine: &SharedEngine, app: &AppHandle, folder: &Folder, to: S
         .await
         .map_err(err)?;
     engine.store.lock().unwrap().rename_folder_tree(&folder.account_id, &from, &to, delim).map_err(err)?;
-    retarget_favorites(app, &folder.account_id, &from, Some(&to), delim);
+    retarget_saved(app, &folder.account_id, &from, Some(&to), delim);
     finish(engine, app, &folder.account_id).await?;
     Ok(folder_id(&folder.account_id, &to))
 }
@@ -253,7 +259,7 @@ pub async fn delete_folder(folder_id: String, engine: State<'_, SharedEngine>, a
             .find(|p| !taken.contains(p))
             .unwrap();
         relocate(&engine, &app, &folder, to.clone(), &delim).await?;
-        retarget_favorites(&app, &account_id, &to, None, &delim);
+        retarget_saved(&app, &account_id, &to, None, &delim);
         return Ok(Deleted::MovedToTrash);
     }
 
@@ -270,7 +276,7 @@ pub async fn delete_folder(folder_id: String, engine: State<'_, SharedEngine>, a
         })
         .await
         .map_err(err)?;
-    retarget_favorites(&app, &account_id, &folder.path, None, &delim);
+    retarget_saved(&app, &account_id, &folder.path, None, &delim);
     finish(&engine, &app, &account_id).await?;
     Ok(Deleted::Deleted)
 }
@@ -290,4 +296,30 @@ pub async fn mark_folder_read(folder_id: String, engine: State<'_, SharedEngine>
         .await;
     engine.wake(Some(&folder.account_id));
     result.map_err(err)
+}
+
+/// Monitor a folder as important, or stop. The account's default (Gmail's
+/// Important folder, otherwise the Inbox) becomes an explicit list the first
+/// time, so it can be switched off like any other folder.
+#[tauri::command]
+pub fn set_folder_important(
+    folder_id: String,
+    important: bool,
+    engine: State<'_, SharedEngine>,
+    state: State<'_, AppState>,
+    app: AppHandle,
+) -> CmdResult<()> {
+    let folder = lookup(&engine, &folder_id)?;
+    let mut settings = state.settings();
+    let mut ids = important_folders(&engine.store.lock().unwrap(), &settings, &folder.account_id);
+    ids.retain(|id| *id != folder.id);
+    if important {
+        ids.push(folder.id.clone());
+    }
+    settings.important_folders.insert(folder.account_id.clone(), ids);
+    settings.save(&state.paths.settings_file()).map_err(err)?;
+    *state.settings.lock().unwrap() = settings;
+    refresh_tray(&app);
+    let _ = app.emit("mail-changed", serde_json::json!({ "account_id": folder.account_id }));
+    Ok(())
 }

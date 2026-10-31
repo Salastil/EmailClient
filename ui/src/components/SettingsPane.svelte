@@ -243,8 +243,13 @@
 
       <h3>What counts as important</h3>
       <div class="card">
+        <div class="switch-row">
+          <div class="grow">
+            <b>In a folder monitored as important</b>
+            <small>Right-click a folder and choose Monitor as important. Unless you change it, that's the Inbox, or Important on Gmail. The tray icon shows unread mail in these folders.</small>
+          </div>
+        </div>
         {#each [
-          ['use_provider_important', 'Marked important by the provider', 'Gmail’s Important label'],
           ['use_contacts', 'From someone in my contacts', ''],
           ['use_flagged', 'Starred or flagged', ''],
           ['use_replied_threads', 'In a conversation I replied to', ''],

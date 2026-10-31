@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
 
-use crate::engine::SharedEngine;
+use crate::engine::{important_folders, in_important_folder, Engine, SharedEngine};
 use crate::state::AppState;
 
 type CmdResult<T> = Result<T, String>;
@@ -45,17 +45,40 @@ pub fn refresh_tray(app: &AppHandle) {
     let Some(tray) = state.tray() else { return };
     let app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
+        // Counted before taking the tray's lock: the store lock can be held for a while.
+        let unread = app.try_state::<SharedEngine>().map(|engine| tray_unread(&engine, &app));
         tray.update(|tray| {
-            let Some(engine) = app.try_state::<SharedEngine>() else { return };
-            tray.unread = engine
-                .accounts_for_ui()
-                .iter()
-                .filter(|a| a.notify != NotifyMode::Muted)
-                .map(|a| a.unread)
-                .sum();
+            let Some(unread) = unread else { return };
+            tray.unread = unread;
             tray.paused = app.state::<AppState>().notifications_paused();
         });
     });
+}
+
+/// Unread mail the tray reports, following each account's notification mode:
+/// Muted accounts never count, "Important only" counts the important folders,
+/// "All" counts the Inbox as well.
+fn tray_unread(engine: &Engine, app: &AppHandle) -> u32 {
+    let settings = app.state::<AppState>().settings();
+    let store = engine.store.lock().unwrap();
+    engine
+        .account_configs()
+        .iter()
+        .map(|a| {
+            let mut folders = match settings.notify_mode(&a.id) {
+                NotifyMode::Muted => return 0,
+                NotifyMode::ImportantOnly => vec![],
+                NotifyMode::All => store
+                    .folder_by_role(&a.id, FolderRole::Inbox)
+                    .ok()
+                    .flatten()
+                    .map(|p| vec![mail_core::store::folder_id(&a.id, &p)])
+                    .unwrap_or_default(),
+            };
+            folders.extend(important_folders(&store, &settings, &a.id));
+            store.unread_in(&a.id, &folders).unwrap_or(0)
+        })
+        .sum()
 }
 
 // ----- reading -----------------------------------------------------------------
@@ -67,8 +90,18 @@ pub fn list_accounts(engine: State<SharedEngine>, app: AppHandle) -> Vec<Account
 }
 
 #[tauri::command]
-pub fn list_folders(account_id: String, engine: State<SharedEngine>) -> CmdResult<Vec<Folder>> {
-    engine.store.lock().unwrap().folders(&account_id).map_err(err)
+pub fn list_folders(account_id: String, engine: State<SharedEngine>, state: State<AppState>) -> CmdResult<Vec<Folder>> {
+    let store = engine.store.lock().unwrap();
+    let mut folders = store.folders(&account_id).map_err(err)?;
+    let important = important_folders(&store, &state.settings(), &account_id);
+    fn mark(list: &mut [Folder], important: &[String]) {
+        for f in list {
+            f.important = important.contains(&f.id);
+            mark(&mut f.children, important);
+        }
+    }
+    mark(&mut folders, &important);
+    Ok(folders)
 }
 
 #[tauri::command]
@@ -753,6 +786,12 @@ pub fn test_notification(account_id: String, engine: State<SharedEngine>, state:
     let msg = inbox
         .and_then(|p| store.messages(&mail_core::store::folder_id(&account_id, &p), 1).ok())
         .and_then(|mut v| v.pop());
+    let ctx = ImportanceContext {
+        in_important_folder: msg
+            .as_ref()
+            .is_some_and(|m| in_important_folder(&store, &important_folders(&store, &settings, &account_id), m)),
+        ..Default::default()
+    };
     drop(store);
     let Some(msg) = msg else {
         crate::notifications::show_plain(&app, "Moho Mail", "Notifications are working.");
@@ -763,7 +802,7 @@ pub fn test_notification(account_id: String, engine: State<SharedEngine>, state:
             settings.notify_mode(&account_id),
             FolderRole::Inbox,
             &msg,
-            &ImportanceContext::default(),
+            &ctx,
             &settings.notifications,
             Local::now().hour() as u8,
         );

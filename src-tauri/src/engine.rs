@@ -11,7 +11,8 @@ use mail_core::model::{Account, AccountStatus, FolderRole, MessageSummary};
 use mail_core::notify::{should_notify, ImportanceContext, NotifyMode};
 use mail_core::paths::AppPaths;
 use mail_core::secrets::{self, SecretKind};
-use mail_core::store::Store;
+use mail_core::settings::Settings;
+use mail_core::store::{folder_id, Store};
 use providers::imap::{self, IdleOutcome, Session};
 use providers::oauth::{self, ClientConfig, Tokens};
 use providers::{Credentials, Error};
@@ -46,11 +47,40 @@ pub struct Engine {
     tokens: tokio::sync::Mutex<HashMap<String, Tokens>>,
     /// One connection per account for user actions, separate from the syncing one.
     ops: Mutex<HashMap<String, Arc<tokio::sync::Mutex<Option<Session>>>>>,
+    /// Messages already notified about, so a Gmail message that turns up in
+    /// several folders (labels) raises one notification.
+    notified: Mutex<HashSet<String>>,
     /// Extra credential providers (the built-in Proton bridge).
     pub proton: crate::proton::ProtonBridge,
 }
 
 pub type SharedEngine = Arc<Engine>;
+
+/// Folder ids an account monitors as important: the user's choice, or by
+/// default Gmail's Important folder, otherwise the Inbox.
+pub fn important_folders(store: &Store, settings: &Settings, account_id: &str) -> Vec<String> {
+    if let Some(ids) = settings.important_folders.get(account_id) {
+        return ids.clone();
+    }
+    [FolderRole::Important, FolderRole::Inbox]
+        .into_iter()
+        .find_map(|role| store.folder_by_role(account_id, role).ok().flatten())
+        .map(|path| vec![folder_id(account_id, &path)])
+        .unwrap_or_default()
+}
+
+/// Whether a message counts as being in one of the `important` folders.
+/// Gmail delivers to INBOX and labels the message `\Important`, so the label
+/// stands in for the Important folder until that folder is synced.
+pub fn in_important_folder(store: &Store, important: &[String], msg: &MessageSummary) -> bool {
+    important.contains(&msg.folder_id)
+        || (msg.important
+            && store
+                .folder_by_role(&msg.account_id, FolderRole::Important)
+                .ok()
+                .flatten()
+                .is_some_and(|path| important.contains(&folder_id(&msg.account_id, &path))))
+}
 
 fn builtin_client(p: OAuthProvider) -> ClientConfig {
     let (id, secret) = match p {
@@ -87,6 +117,7 @@ impl Engine {
             statuses: Mutex::new(HashMap::new()),
             tokens: tokio::sync::Mutex::new(HashMap::new()),
             ops: Mutex::new(HashMap::new()),
+            notified: Mutex::new(HashSet::new()),
             proton,
         }))
     }
@@ -309,7 +340,19 @@ impl Engine {
                 session = s;
                 match outcome {
                     IdleOutcome::NewData => {
-                        let r = imap::sync_paths(&mut session, &cfg.id, &self.store, std::slice::from_ref(&inbox)).await?;
+                        // Important folders too, so the tray catches up right away.
+                        let mut paths = vec![inbox.clone()];
+                        let important = {
+                            let store = self.store.lock().unwrap();
+                            important_folders(&store, &self.app.state::<AppState>().settings(), &cfg.id)
+                        };
+                        let prefix = format!("{}:", cfg.id);
+                        for path in important.iter().filter_map(|id| id.strip_prefix(&prefix)) {
+                            if !paths.iter().any(|p| p == path) {
+                                paths.push(path.to_string());
+                            }
+                        }
+                        let r = imap::sync_paths(&mut session, &cfg.id, &self.store, &paths).await?;
                         if r.changed {
                             self.emit_changed(&cfg.id);
                         }
@@ -355,22 +398,34 @@ impl Engine {
             .chain(crate::pim::contact_emails(&self.app))
             .collect();
         let hour = Local::now().hour() as u8;
+        let important = important_folders(&store, &settings, account_id);
+        let mut notified = self.notified.lock().unwrap();
+        if notified.len() > 10_000 {
+            notified.clear();
+        }
         let mut to_show: Vec<MessageSummary> = Vec::new();
         for (id, role) in new {
             let Ok(Some(msg)) = store.summary(*id) else { continue };
             if !msg.unread {
                 continue;
             }
+            let key = if msg.message_id.is_empty() { msg.id.clone() } else { msg.message_id.clone() };
+            if notified.contains(&format!("{account_id}\n{key}")) {
+                continue;
+            }
             let mut refs = msg.references.clone();
             refs.extend(msg.in_reply_to.clone());
             let ctx = ImportanceContext {
+                in_important_folder: in_important_folder(&store, &important, &msg),
                 contacts: Some(&contacts),
                 replied_in_thread: store.replied_in_thread(account_id, &refs).unwrap_or(false),
             };
             if should_notify(mode, *role, &msg, &ctx, &settings.notifications, hour) {
+                notified.insert(format!("{account_id}\n{key}"));
                 to_show.push(msg);
             }
         }
+        drop(notified);
         drop(store);
         let account = self.account(account_id).map(|a| a.name).unwrap_or_default();
         crate::notifications::show_new_mail(&self.app, &account, to_show);

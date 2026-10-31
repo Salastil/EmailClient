@@ -39,7 +39,6 @@ pub struct NotifySettings {
     pub quiet_hours: Option<(u8, u8)>,
     pub vip: Vec<String>,
     pub rules: Vec<ImportanceRule>,
-    pub use_provider_important: bool,
     pub use_contacts: bool,
     pub use_flagged: bool,
     pub use_replied_threads: bool,
@@ -53,7 +52,6 @@ impl Default for NotifySettings {
             quiet_hours: None,
             vip: Vec::new(),
             rules: Vec::new(),
-            use_provider_important: true,
             use_contacts: true,
             use_flagged: true,
             use_replied_threads: true,
@@ -65,6 +63,9 @@ impl Default for NotifySettings {
 /// Facts about the message that come from outside the message itself.
 #[derive(Debug, Default)]
 pub struct ImportanceContext<'a> {
+    /// The message is in a folder the user monitors as important (by default
+    /// the Inbox, or Gmail's Important folder).
+    pub in_important_folder: bool,
     /// Lower-cased addresses from the user's address books.
     pub contacts: Option<&'a HashSet<String>>,
     /// The user has already replied in this message's thread.
@@ -76,7 +77,7 @@ pub fn is_important(msg: &MessageSummary, ctx: &ImportanceContext, s: &NotifySet
     let domain = sender.rsplit_once('@').map(|(_, d)| d).unwrap_or("");
     let subject = msg.subject.to_lowercase();
 
-    (s.use_provider_important && msg.important)
+    ctx.in_important_folder
         || (s.use_flagged && msg.flagged)
         || (s.use_replied_threads && ctx.replied_in_thread)
         || (s.use_contacts && ctx.contacts.is_some_and(|c| c.contains(&sender)))
@@ -164,11 +165,8 @@ mod tests {
         let mut m = msg("Boss@Work.example", "Status");
         assert!(!notify(NotifyMode::ImportantOnly, &m, &s));
 
-        m.important = true;
-        assert!(notify(NotifyMode::ImportantOnly, &m, &s));
-        s.use_provider_important = false;
-        assert!(!notify(NotifyMode::ImportantOnly, &m, &s));
-        m.important = false;
+        let ctx = ImportanceContext { in_important_folder: true, ..Default::default() };
+        assert!(should_notify(NotifyMode::ImportantOnly, FolderRole::Inbox, &m, &ctx, &s, 12));
 
         m.flagged = true;
         assert!(notify(NotifyMode::ImportantOnly, &m, &s));
