@@ -28,6 +28,17 @@ pub struct ProtonBridge {
     hv_tokens: Mutex<HashMap<String, String>>,
 }
 
+/// Turn Proton API refusals users can act on into plain words.
+fn explain(e: &str) -> String {
+    // 10004: Proton allows Bridge (and so third-party apps) only on paid plans.
+    if e.contains("Code=10004") {
+        return "Proton only lets mail apps like Moho Mail connect to paid accounts. \
+                This account is on Proton Free; upgrade it at account.proton.me to add it here."
+            .into();
+    }
+    e.into()
+}
+
 fn other(e: impl std::fmt::Display) -> Error {
     Error::Other(e.to_string())
 }
@@ -120,7 +131,7 @@ impl ProtonBridge {
                 hv.as_deref(),
             )
         })
-        .map_err(|e| Error::Auth(e.to_string()))?;
+        .map_err(|e| Error::Auth(explain(&e.to_string())))?;
         match step {
             LoginStep::Done { .. } => {
                 self.hv_tokens.lock().unwrap().remove(&key);
@@ -165,5 +176,16 @@ impl ProtonBridge {
         if self.status.lock().unwrap().take().is_some() {
             bridge::stop();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn explains_the_free_plan_refusal() {
+        let raw = "failed to create new API client: 422 POST https://mail-api.proton.me/auth/v4: \
+                   Please upgrade to a paid plan to use this client (Code=10004, Status=422)";
+        assert!(super::explain(raw).starts_with("Proton only lets mail apps"));
+        assert_eq!(super::explain("wrong password"), "wrong password");
     }
 }
