@@ -6,7 +6,7 @@ pkgdesc='Email and calendar client with a four-column layout (Tauri + WebKitGTK)
 arch=('x86_64' 'aarch64')
 url='https://github.com/salastil/emailclient'
 license=('GPL-3.0-or-later')
-depends=('webkit2gtk-4.1' 'gtk3' 'libsecret' 'dbus' 'hicolor-icon-theme')
+depends=('webkit2gtk-4.1' 'gtk3' 'libsecret' 'sqlite' 'dbus' 'hicolor-icon-theme')
 optdepends=('gnome-keyring: stores passwords (or another Secret Service such as KeePassXC or KWallet)'
             'xdg-desktop-portal: native file pickers')
 makedepends=('rust' 'cargo' 'go' 'pnpm' 'nodejs')

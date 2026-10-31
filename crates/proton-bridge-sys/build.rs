@@ -35,7 +35,9 @@ fn main() {
     let status = Command::new(std::env::var("GO").unwrap_or_else(|_| "go".into()))
         .current_dir(&src)
         .env("CGO_ENABLED", "1")
-        .args(["build", "-buildmode=c-archive", "-trimpath", "-mod=mod"])
+        // Link the system SQLite instead of go-sqlite3's embedded copy, so Go and
+        // Rust share one SQLite in the process (two copies clash at link time).
+        .args(["build", "-buildmode=c-archive", "-trimpath", "-mod=mod", "-tags=libsqlite3"])
         .arg(format!("-ldflags={ldflags}"))
         .arg("-o")
         .arg(out.join("libprotonbridge.a"))
@@ -46,6 +48,19 @@ fn main() {
 
     println!("cargo:rustc-link-search=native={}", out.display());
     println!("cargo:rustc-link-lib=static=protonbridge");
+    // C libraries pulled in through cgo (Bridge's keychain helper uses libsecret).
+    let pkg = Command::new("pkg-config")
+        .args(["--libs", "libsecret-1", "sqlite3"])
+        .output()
+        .expect("pkg-config is needed to build the Proton bridge");
+    assert!(pkg.status.success(), "libsecret-1 or sqlite3 development files are missing");
+    for flag in String::from_utf8_lossy(&pkg.stdout).split_whitespace() {
+        if let Some(lib) = flag.strip_prefix("-l") {
+            println!("cargo:rustc-link-lib=dylib={lib}");
+        } else if let Some(dir) = flag.strip_prefix("-L") {
+            println!("cargo:rustc-link-search=native={dir}");
+        }
+    }
     for lib in ["pthread", "dl", "resolv", "m"] {
         println!("cargo:rustc-link-lib=dylib={lib}");
     }

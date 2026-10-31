@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Repack a Tauri-built AppImage so it starts through our sandboxing AppRun.
+#
+#   packaging/appimage/sandbox-appimage.sh <input.AppImage> <output.AppImage>
+#
+# Needs appimagetool on PATH (or APPIMAGETOOL pointing to it).
+set -euo pipefail
+
+in="$(readlink -f "$1")"
+out="$(readlink -f "$(dirname "$2")")/$(basename "$2")"
+here="$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")"
+tool="${APPIMAGETOOL:-appimagetool}"
+
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+cd "$work"
+"$in" --appimage-extract >/dev/null
+root="$work/squashfs-root"
+
+# Keep linuxdeploy's launcher (it sets up GTK/WebKit paths) and start it from ours.
+mv "$root/AppRun" "$root/AppRun.unsandboxed"
+install -m 0755 "$here/AppRun" "$root/AppRun"
+
+ARCH="${ARCH:-$(uname -m)}" "$tool" --no-appstream "$root" "$out"
+echo "wrote $out"

@@ -11,6 +11,10 @@ build = "build.rs"
 # Build Proton's bridge from source (needs Go and PROTON_BRIDGE_SRC).
 bundled = []
 
+[dev-dependencies]
+tempfile = "3"
+rusqlite = "0.37"
+
 [dependencies]
 serde.workspace = true
 serde_json.workspace = true

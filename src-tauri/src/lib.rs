@@ -1,5 +1,6 @@
 mod commands;
 mod engine;
+mod launch;
 mod notifications;
 mod pim;
 mod proton;
@@ -109,6 +110,7 @@ pub fn run() {
             commands::test_notification,
             commands::quit,
             commands::app_info,
+            launch::open_link,
             pim::pim_sources,
             pim::update_source,
             pim::remove_source,

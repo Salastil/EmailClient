@@ -17,7 +17,6 @@ use providers::oauth;
 use providers::Credentials;
 use serde::Deserialize;
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_opener::OpenerExt;
 use tokio::sync::Notify;
 
 use crate::engine::SharedEngine;
@@ -579,7 +578,7 @@ pub async fn add_calendar_account(input: CalendarAccount, pim: State<'_, SharedP
         }
         CalendarAccount::Nextcloud { server } => {
             let pending = pim::nextcloud::begin(&server).await.map_err(err)?;
-            app.opener().open_url(&pending.login_url, None::<&str>).map_err(err)?;
+            crate::launch::open_url(&app, &pending.login_url).await?;
             let creds = pending.wait(Duration::from_secs(600)).await.map_err(err)?;
             crate::window::show(&app);
             secrets::store_named(&secret_name(&login), &creds.app_password).map_err(err)?;
@@ -611,7 +610,7 @@ pub async fn add_calendar_account(input: CalendarAccount, pim: State<'_, SharedP
         CalendarAccount::Microsoft => {
             let client = engine.oauth_client(OAuthProvider::Microsoft);
             let pending = oauth::begin(OAuthProvider::Microsoft, &client, None, Some(oauth::MICROSOFT_GRAPH_SCOPES)).await.map_err(err)?;
-            app.opener().open_url(&pending.url, None::<&str>).map_err(err)?;
+            crate::launch::open_url(&app, &pending.url).await?;
             let tokens = pending.finish(Duration::from_secs(600)).await.map_err(err)?;
             crate::window::show(&app);
             let refresh = tokens.refresh_token.clone().ok_or("Microsoft did not return a refresh token")?;

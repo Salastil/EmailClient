@@ -20,6 +20,8 @@ pub struct ProtonBridge {
     data: String,
     cache: String,
     status: Mutex<Option<Status>>,
+    /// Serializes startup so concurrent callers start the bridge once.
+    starting: Mutex<()>,
 }
 
 fn other(e: impl std::fmt::Display) -> Error {
@@ -34,6 +36,7 @@ impl ProtonBridge {
             data: s(paths.proton_vault_dir()),
             cache: s(paths.proton_cache_dir()),
             status: Mutex::new(None),
+            starting: Mutex::new(()),
         }
     }
 
@@ -57,6 +60,7 @@ impl ProtonBridge {
 
     /// Start the bridge if it isn't running yet. Blocking; call off the UI thread.
     fn ensure_started(&self) -> Result<Status, Error> {
+        let _starting = self.starting.lock().unwrap();
         if let Some(s) = self.status.lock().unwrap().clone() {
             return Ok(s);
         }

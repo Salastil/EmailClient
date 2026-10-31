@@ -19,7 +19,6 @@ use providers::{imap, oauth, Credentials};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_dialog::DialogExt;
-use tauri_plugin_opener::OpenerExt;
 
 use crate::engine::SharedEngine;
 use crate::state::AppState;
@@ -149,7 +148,7 @@ pub async fn open_attachment(id: String, index: usize, engine: State<'_, SharedE
     std::fs::create_dir_all(&dir).map_err(err)?;
     let path = dir.join(name);
     std::fs::write(&path, bytes).map_err(err)?;
-    app.opener().open_path(path.to_string_lossy(), None::<&str>).map_err(err)
+    crate::launch::open_path(&app, &path).await
 }
 
 /// Save an attachment where the user chooses. Returns the saved path.
@@ -473,7 +472,7 @@ fn default_name(provider: Provider, email: &str) -> String {
 async fn browser_sign_in(app: &AppHandle, engine: &SharedEngine, provider: OAuthProvider, hint: &str) -> CmdResult<oauth::Tokens> {
     let pending = oauth::begin(provider, &engine.oauth_client(provider), Some(hint), None).await.map_err(err)?;
     let _ = app.emit("oauth-url", pending.url.clone());
-    app.opener().open_url(&pending.url, None::<&str>).map_err(|e| format!("cannot open the browser: {e}"))?;
+    crate::launch::open_url(app, &pending.url).await?;
     let (tx, rx) = tokio::sync::oneshot::channel::<()>();
     *app.state::<AppState>().oauth_cancel.lock().unwrap() = Some(tx);
     let result = tokio::select! {
@@ -544,7 +543,14 @@ pub async fn add_account(input: NewAccount, engine: State<'_, SharedEngine>, app
 }
 
 #[tauri::command]
-pub async fn reauthenticate(account_id: String, password: Option<String>, engine: State<'_, SharedEngine>, app: AppHandle) -> CmdResult<()> {
+pub async fn reauthenticate(
+    account_id: String,
+    password: Option<String>,
+    totp: Option<String>,
+    mailbox_password: Option<String>,
+    engine: State<'_, SharedEngine>,
+    app: AppHandle,
+) -> CmdResult<()> {
     let cfg = engine.account(&account_id).ok_or("unknown account")?;
     match cfg.auth {
         AuthMethod::Password => {
@@ -563,7 +569,11 @@ pub async fn reauthenticate(account_id: String, password: Option<String>, engine
             engine.remember_tokens(&cfg.id, tokens).await;
         }
         AuthMethod::ProtonBridge => {
-            engine.proton.login(&cfg.email, password.as_deref().unwrap_or(""), None, None).await.map_err(err)?;
+            engine
+                .proton
+                .login(&cfg.email, password.as_deref().unwrap_or(""), totp.as_deref(), mailbox_password.as_deref())
+                .await
+                .map_err(err)?;
         }
     }
     engine.wake(Some(&cfg.id));

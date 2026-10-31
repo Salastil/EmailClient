@@ -13,7 +13,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 roxmltree = "0.20"
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = "0.37"
 uuid = { version = "1", features = ["v4"] }
 url = "2"
 tracing = "0.1"

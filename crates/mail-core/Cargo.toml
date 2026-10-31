@@ -12,7 +12,7 @@ thiserror.workspace = true
 chrono.workspace = true
 ammonia = "4"
 
-rusqlite = { version = "0.37", features = ["bundled"] }
+rusqlite = "0.37"
 mail-parser = "0.11"
 keyring = { version = "3.6", features = ["sync-secret-service", "crypto-rust"] }
 uuid = { version = "1", features = ["v4"] }

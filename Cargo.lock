@@ -80,6 +80,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "ashpd"
+version = "0.13.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fb8421aaa9644a5faf26735f258b669b15f063313ef8f8e2bdb28912a1a6f111"
+dependencies = [
+ "enumflags2",
+ "futures-util",
+ "getrandom 0.4.3",
+ "serde",
+ "tokio",
+ "zbus 5.19.0",
+]
+
+[[package]]
 name = "async-broadcast"
 version = "0.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2519,7 +2533,6 @@ version = "0.35.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "133c182a6a2c87864fe97778797e46c7e999672690dc9fa3ee8e241aa4a9c13f"
 dependencies = [
- "cc",
  "pkg-config",
  "vcpkg",
 ]
@@ -2705,6 +2718,7 @@ dependencies = [
 name = "moho-mail"
 version = "0.1.0"
 dependencies = [
+ "ashpd",
  "base64 0.22.1",
  "chrono",
  "ksni",
@@ -3614,8 +3628,10 @@ dependencies = [
 name = "proton-bridge-sys"
 version = "0.1.0"
 dependencies = [
+ "rusqlite",
  "serde",
  "serde_json",
+ "tempfile",
 ]
 
 [[package]]

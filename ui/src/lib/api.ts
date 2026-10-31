@@ -24,7 +24,8 @@ export const api = {
   discoverAccount: (email: string) => invoke<Discovered>('discover_account', { email }),
   addAccount: (input: NewAccount) => invoke<Account>('add_account', { input }),
   cancelOAuth: () => invoke<void>('cancel_oauth'),
-  reauthenticate: (accountId: string, password: string | null) => invoke<void>('reauthenticate', { accountId, password }),
+  reauthenticate: (accountId: string, password: string | null, totp: string | null = null, mailboxPassword: string | null = null) =>
+    invoke<void>('reauthenticate', { accountId, password, totp, mailboxPassword }),
   updateAccount: (accountId: string, update: { name: string; sender_name: string; color: string }) =>
     invoke<void>('update_account', { accountId, update }),
   removeAccount: (accountId: string) => invoke<void>('remove_account', { accountId }),
@@ -34,6 +35,7 @@ export const api = {
   setAccountNotify: (accountId: string, mode: NotifyMode) => invoke<void>('set_account_notify', { accountId, mode }),
   testNotification: (accountId: string) => invoke<boolean>('test_notification', { accountId }),
   quit: () => invoke<void>('quit'),
+  openLink: (url: string) => invoke<void>('open_link', { url }),
   appInfo: () =>
     invoke<{ version: string; proton_bridge: string | null; config_dir: string; cache_dir: string; data_dir: string }>('app_info'),
 };

@@ -7,3 +7,4 @@ node_modules/
 /packaging/arch*/moho-mail*
 !/packaging/arch*/PKGBUILD
 *.pkg.tar.*
+/third_party

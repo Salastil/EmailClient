@@ -1,0 +1,118 @@
+name: AppImage
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+env:
+  PROTON_BRIDGE_VERSION: "3.27.1"
+
+jobs:
+  appimage:
+    name: Build sandboxed AppImage (Ubuntu 26.04 LTS)
+    runs-on: ubuntu-latest
+    # Build against the latest Ubuntu LTS packages; the AppImage bundles them.
+    container: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      # No FUSE inside containers: let AppImage tools unpack themselves.
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+      # linuxdeploy's bundled strip cannot handle binaries from newer toolchains.
+      NO_STRIP: "true"
+      CARGO_TERM_COLOR: always
+    steps:
+      - name: Install system packages
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            build-essential ca-certificates curl wget file git pkg-config patchelf xdg-utils \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libsecret-1-dev libsqlite3-dev \
+            libdbus-1-dev libssl-dev squashfs-tools desktop-file-utils
+
+      - uses: actions/checkout@v4
+
+      - name: Check out Proton Mail Bridge v${{ env.PROTON_BRIDGE_VERSION }}
+        uses: actions/checkout@v4
+        with:
+          repository: ProtonMail/proton-bridge
+          ref: v${{ env.PROTON_BRIDGE_VERSION }}
+          path: third_party/proton-bridge
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/proton-bridge/go.mod
+          cache-dependency-path: third_party/proton-bridge/go.sum
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check frontend
+        run: pnpm check
+
+      - name: Unit tests
+        run: cargo test --workspace --locked
+
+      - name: Build AppImage (with the built-in Proton bridge)
+        env:
+          PROTON_BRIDGE_SRC: ${{ github.workspace }}/third_party/proton-bridge
+          MOHO_GOOGLE_CLIENT_ID: ${{ secrets.MOHO_GOOGLE_CLIENT_ID }}
+          MOHO_GOOGLE_CLIENT_SECRET: ${{ secrets.MOHO_GOOGLE_CLIENT_SECRET }}
+          MOHO_MICROSOFT_CLIENT_ID: ${{ secrets.MOHO_MICROSOFT_CLIENT_ID }}
+          MOHO_YAHOO_CLIENT_ID: ${{ secrets.MOHO_YAHOO_CLIENT_ID }}
+          MOHO_YAHOO_CLIENT_SECRET: ${{ secrets.MOHO_YAHOO_CLIENT_SECRET }}
+          MOHO_FASTMAIL_CLIENT_ID: ${{ secrets.MOHO_FASTMAIL_CLIENT_ID }}
+        run: |
+          cargo test -p proton-bridge-sys --features bundled --locked --test bridge_live shares_one_sqlite_with_fts5
+          pnpm tauri build --bundles appimage --features proton-bridge
+
+      - name: Wrap the AppImage in the bubblewrap sandbox
+        run: |
+          wget -q -O /usr/local/bin/appimagetool \
+            https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
+          chmod +x /usr/local/bin/appimagetool
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          mkdir -p dist
+          ARCH=x86_64 packaging/appimage/sandbox-appimage.sh \
+            target/release/bundle/appimage/*.AppImage \
+            "dist/Moho_Mail-${version}-x86_64.AppImage"
+          (cd dist && sha256sum *.AppImage > SHA256SUMS)
+
+      - name: Smoke-test the AppImage
+        run: |
+          app="$(ls dist/*.AppImage)"
+          "$app" --appimage-extract AppRun >/dev/null
+          grep -q 'exec bwrap' squashfs-root/AppRun
+          "$app" --appimage-extract AppRun.unsandboxed >/dev/null
+          test -e squashfs-root/AppRun.unsandboxed
+          rm -rf squashfs-root
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: moho-mail-appimage
+          path: dist/*
+          if-no-files-found: error
+
+      - name: Publish release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*

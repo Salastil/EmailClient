@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { openUrl } from '@tauri-apps/plugin-opener';
   import Icon from './Icon.svelte';
   import { api } from '../lib/api';
   import { displayName, fileSize, fullAddress, hashColor, initials, longDate } from '../lib/format';
@@ -93,7 +92,7 @@
       const a = (e.target as Element).closest?.('a[href]') as HTMLAnchorElement | null;
       if (!a) return;
       e.preventDefault();
-      if (/^(https?|mailto):/i.test(a.href)) openUrl(a.href);
+      if (/^(https?|mailto):/i.test(a.href)) api.openLink(a.href).catch((e) => (note = String(e)));
     });
   }
 

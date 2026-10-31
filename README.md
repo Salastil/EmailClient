@@ -97,11 +97,11 @@ Users can also enter their own in **Settings → Advanced**. For Google, create 
 
 Requirements:
 - Rust (stable), Node.js 20+ and pnpm
-- WebKitGTK 4.1 development files
+- WebKitGTK 4.1, libsecret and SQLite development files (Rust and the Proton bridge share the system SQLite)
 - Go, only for the Proton bridge
 
 ```bash
-sudo pacman -S --needed webkit2gtk-4.1 gtk3 libsecret base-devel rust nodejs pnpm go
+sudo pacman -S --needed webkit2gtk-4.1 gtk3 libsecret sqlite base-devel rust nodejs pnpm go
 ```
 
 ```bash
@@ -138,6 +138,36 @@ cargo test --workspace
 
 ```bash
 scripts/test-servers.sh stop
+```
+
+### AppImage (sandboxed)
+
+The [AppImage workflow](.github/workflows/appimage.yml) builds on every push to `main`. It:
+- builds inside an `ubuntu:26.04` container (the latest Ubuntu LTS), so the AppImage bundles that release's GTK/WebKitGTK
+- includes the Proton bridge
+- uploads the AppImage as a build artifact, and attaches it to the release for `v*` tags
+
+The AppImage's launcher ([`packaging/appimage/AppRun`](packaging/appimage/AppRun)) starts Moho Mail inside a **bubblewrap** sandbox:
+- the system (`/usr`, `/etc`) is read-only
+- `/tmp` and `/run` are private
+- of your home folder, only Moho Mail's own XDG directories, `~/Downloads` and the autostart folder are writable, and fonts, icons and themes are read-only
+- everything else (documents, SSH keys, browser profiles) is invisible
+- network access and the session D-Bus (keyring, notifications, tray, portals) stay available
+- links and attachments open on the host through the desktop portal
+
+To use the sandbox:
+- **bubblewrap:** install `bwrap` (package `bubblewrap`). Without it, the AppImage warns and runs unsandboxed.
+- **Bypass:** `MOHO_NO_SANDBOX=1` runs without the sandbox.
+- **Extra folders:** `MOHO_SANDBOX_EXTRA=/path/a:/path/b` grants more folders.
+
+To build one locally:
+
+```bash
+APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=true pnpm tauri build --bundles appimage --features proton-bridge
+```
+
+```bash
+packaging/appimage/sandbox-appimage.sh target/release/bundle/appimage/*.AppImage Moho_Mail-x86_64.AppImage
 ```
 
 ### Arch Linux package

@@ -40,6 +40,9 @@
   let query = $state('');
   let searchResults = $state<MessageSummary[] | null>(null);
   let reauthPassword = $state('');
+  let reauthTotp = $state('');
+  let reauthMailbox = $state('');
+  let reauthProton = $state(false);
   let search: HTMLInputElement;
 
   let foldersWidth = $state(240);
@@ -57,7 +60,15 @@
     return null;
   }
 
+  /** Turn the bridge's "needs:" replies into instructions. */
+  function friendly(msg: string): string {
+    if (msg.includes('needs:totp')) return 'Enter the two-factor code from your authenticator app.';
+    if (msg.includes('needs:mailbox_password')) return 'Enter your Proton mailbox password.';
+    return msg;
+  }
+
   function notify(text: string, error = false) {
+    text = friendly(text);
     toast = { text, error };
     if (!error) setTimeout(() => toast?.text === text && (toast = null), 3500);
   }
@@ -283,9 +294,12 @@
 
   async function reauth() {
     if (!account) return;
-    const isPassword = (await guard(api.accountDetails(account.id)))?.auth.kind !== 'o_auth2';
-    if (isPassword) {
+    const kind = (await guard(api.accountDetails(account.id)))?.auth.kind;
+    if (kind !== 'o_auth2') {
       reauthPassword = '';
+      reauthTotp = '';
+      reauthMailbox = '';
+      reauthProton = kind === 'proton_bridge';
       dialog = 'reauth';
     } else {
       notify('Finish signing in in your browser…');
@@ -295,7 +309,7 @@
 
   async function submitReauth() {
     if (!account) return;
-    if ((await guard(api.reauthenticate(account.id, reauthPassword))) !== undefined) {
+    if ((await guard(api.reauthenticate(account.id, reauthPassword, reauthTotp || null, reauthMailbox || null))) !== undefined) {
       dialog = null;
       notify('Signed in');
     }
@@ -479,7 +493,12 @@
   <Dialog title="Sign in to {account.email}" onclose={() => (dialog = null)}>
     <form class="reauth" onsubmit={(e) => { e.preventDefault(); submitReauth(); }}>
       <p>{account.status.state === 'needs_auth' ? account.status.message : ''}</p>
+      <button type="submit" class="implicit-submit" tabindex="-1" aria-hidden="true"></button>
       <input type="password" placeholder="Password" bind:value={reauthPassword} />
+      {#if reauthProton}
+        <input inputmode="numeric" placeholder="Two-factor code (if enabled)" bind:value={reauthTotp} />
+        <input type="password" placeholder="Mailbox password (two-password mode only)" bind:value={reauthMailbox} />
+      {/if}
     </form>
     {#snippet actions()}
       <button class="tonal-btn" onclick={() => (dialog = null)}>Cancel</button>

@@ -203,8 +203,10 @@ func moho_bridge_start(configDir, dataDir, cacheDir, vaultKeyB64, version *C.cha
 	var obs *observability.Service
 	_ = observability.WithObservability(locs, func(s *observability.Service) error { obs = s; return nil })
 
+	// Moho Mail supplies the vault key itself, so Bridge never needs to probe
+	// or write the system keyring; an in-memory keychain list satisfies its API.
 	b, eventCh, err := bridge.New(
-		locs, v, noopAutostart{}, noopUpdater{}, ver, keychain.NewList(), obs,
+		locs, v, noopAutostart{}, noopUpdater{}, ver, keychain.NewTestKeychainsList(), obs,
 		constants.APIHost, jar, identifier, pinning, dialer.CreateTransportWithDialer(proxy), proxy,
 		crashHandler, noopReporter{}, imap.DefaultEpochUIDValidityGenerator(), nil,
 		false, false, false,
