@@ -35,10 +35,8 @@ impl AppState {
         self.tray.lock().unwrap().as_ref().is_some_and(|t| !t.is_closed())
     }
 
-    pub fn with_tray(&self, f: impl FnOnce(&TrayHandle)) {
-        if let Some(t) = self.tray.lock().unwrap().as_ref() {
-            f(t);
-        }
+    pub fn tray(&self) -> Option<TrayHandle> {
+        self.tray.lock().unwrap().clone()
     }
 
     pub fn notifications_paused(&self) -> bool {

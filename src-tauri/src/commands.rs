@@ -34,20 +34,26 @@ fn msg_id(id: &str) -> CmdResult<i64> {
 }
 
 /// Recompute the tray badge: unread inbox mail in accounts that are not muted.
+///
+/// Returns without waiting. Applying an update makes the tray thread rebuild
+/// its menu, which asks the main thread whether the window is shown, so
+/// blocking here from a command on the main thread would deadlock. The counts
+/// are read when the update is applied, so updates finishing out of order
+/// still leave the latest numbers.
 pub fn refresh_tray(app: &AppHandle) {
     let state = app.state::<AppState>();
-    let Some(engine) = app.try_state::<SharedEngine>() else { return };
-    let unread = engine
-        .accounts_for_ui()
-        .iter()
-        .filter(|a| a.notify != NotifyMode::Muted)
-        .map(|a| a.unread)
-        .sum();
-    let paused = state.notifications_paused();
-    state.with_tray(|t| {
-        t.update(|tray| {
-            tray.unread = unread;
-            tray.paused = paused;
+    let Some(tray) = state.tray() else { return };
+    let app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        tray.update(|tray| {
+            let Some(engine) = app.try_state::<SharedEngine>() else { return };
+            tray.unread = engine
+                .accounts_for_ui()
+                .iter()
+                .filter(|a| a.notify != NotifyMode::Muted)
+                .map(|a| a.unread)
+                .sum();
+            tray.paused = app.state::<AppState>().notifications_paused();
         });
     });
 }
