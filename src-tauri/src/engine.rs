@@ -318,6 +318,8 @@ impl Engine {
     ) -> Result<(), Error> {
         loop {
             let started = Instant::now();
+            // Also after "Check for new mail" wakes us, so the UI shows it working.
+            self.set_status(&cfg.id, AccountStatus::Syncing);
             let report = imap::sync_account(&mut session, &cfg.id, &self.store).await?;
             self.set_status(&cfg.id, AccountStatus::Idle);
             if report.changed {

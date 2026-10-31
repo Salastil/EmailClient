@@ -47,6 +47,14 @@
     return list.flatMap((f) => [f, ...flat(f.children)]);
   }
 
+  // Spin for at least a moment after a click, even when the check is quick.
+  let checking = $state(false);
+  function checkNow() {
+    checking = true;
+    setTimeout(() => (checking = false), 1000);
+    onsync();
+  }
+
   const status = $derived.by(() => {
     const st = account?.status;
     switch (st?.state) {
@@ -127,8 +135,8 @@
         <span class="name">{account.email}</span>
         <span class="status" title={status.title}><span class="dot {status.dot}"></span>{status.text}</span>
       </div>
-      <button class="icon-btn" title="Check for new mail" onclick={onsync}>
-        <span class:spin={status.dot === 'sync'}><Icon name="sync" size={18} /></span>
+      <button class="icon-btn" title="Check for new mail" onclick={checkNow}>
+        <span class:spin={checking || status.dot === 'sync'}><Icon name="sync" size={18} /></span>
       </button>
     </footer>
   {/if}
