@@ -28,6 +28,20 @@ pub struct Account {
     pub color: String,
     pub unread: u32,
     pub notify: NotifyMode,
+    #[serde(default)]
+    pub status: AccountStatus,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case", tag = "state", content = "message")]
+pub enum AccountStatus {
+    #[default]
+    Idle,
+    Syncing,
+    Offline(String),
+    Error(String),
+    /// Credentials were rejected or the OAuth grant was revoked.
+    NeedsAuth(String),
 }
 
 /// IMAP special-use role (RFC 6154) of a folder.
@@ -50,6 +64,8 @@ pub enum FolderRole {
 pub struct Folder {
     pub id: String,
     pub account_id: String,
+    /// Server-side mailbox name.
+    pub path: String,
     pub name: String,
     pub role: FolderRole,
     pub unread: u32,
@@ -58,7 +74,7 @@ pub struct Folder {
     pub children: Vec<Folder>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Address {
     pub name: Option<String>,
     pub email: String,
@@ -87,6 +103,8 @@ pub struct MessageSummary {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Attachment {
+    /// Position among the message's attachments, used to download it.
+    pub index: usize,
     pub name: String,
     pub mime: String,
     pub size: u64,

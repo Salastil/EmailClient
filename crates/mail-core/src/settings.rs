@@ -62,6 +62,18 @@ pub struct Settings {
     pub account_notify: HashMap<String, NotifyMode>,
 }
 
+/// Write atomically (temp file + rename) so a crash never leaves a torn file.
+pub fn write_atomic(path: &Path, text: &str) -> Result<(), SettingsError> {
+    let tmp = path.with_extension("tmp");
+    {
+        let mut f = std::fs::File::create(&tmp)?;
+        f.write_all(text.as_bytes())?;
+        f.sync_all()?;
+    }
+    std::fs::rename(&tmp, path)?;
+    Ok(())
+}
+
 impl Settings {
     /// Load settings; a missing file yields defaults.
     pub fn load(path: &Path) -> Result<Self, SettingsError> {
@@ -72,17 +84,8 @@ impl Settings {
         }
     }
 
-    /// Write atomically (temp file + rename) so a crash never leaves a torn file.
     pub fn save(&self, path: &Path) -> Result<(), SettingsError> {
-        let text = toml::to_string_pretty(self)?;
-        let tmp = path.with_extension("toml.tmp");
-        {
-            let mut f = std::fs::File::create(&tmp)?;
-            f.write_all(text.as_bytes())?;
-            f.sync_all()?;
-        }
-        std::fs::rename(&tmp, path)?;
-        Ok(())
+        write_atomic(path, &toml::to_string_pretty(self)?)
     }
 
     pub fn notify_mode(&self, account_id: &str) -> NotifyMode {
