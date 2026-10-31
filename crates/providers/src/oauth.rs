@@ -100,11 +100,21 @@ pub struct Tokens {
     pub expires_at: Instant,
     /// Email from the ID token, when the provider returns one.
     pub email: Option<String>,
+    /// Scopes the user actually granted, when the provider says. Google lets
+    /// people untick permissions on its consent page.
+    pub granted: Option<Vec<String>>,
 }
 
 impl Tokens {
     pub fn is_fresh(&self) -> bool {
         self.expires_at > Instant::now() + Duration::from_secs(60)
+    }
+
+    /// Requested scopes the user did not grant (none when the provider
+    /// doesn't report what was granted).
+    pub fn missing<'a>(&self, wanted: &[&'a str]) -> Vec<&'a str> {
+        let Some(granted) = &self.granted else { return vec![] };
+        wanted.iter().copied().filter(|w| !granted.iter().any(|g| g == w)).collect()
     }
 }
 
@@ -117,6 +127,8 @@ struct TokenResponse {
     expires_in: Option<u64>,
     #[serde(default)]
     id_token: Option<String>,
+    #[serde(default)]
+    scope: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -286,6 +298,7 @@ async fn token_request(token_url: &str, form: &[(&str, String)]) -> Result<Token
         access_token: t.access_token,
         refresh_token: t.refresh_token,
         expires_at: Instant::now() + Duration::from_secs(t.expires_in.unwrap_or(3600)),
+        granted: t.scope.map(|s| s.split_whitespace().map(str::to_string).collect()),
     })
 }
 

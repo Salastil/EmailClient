@@ -604,8 +604,31 @@ async fn browser_sign_in(app: &AppHandle, engine: &SharedEngine, provider: OAuth
     };
     app.state::<AppState>().oauth_cancel.lock().unwrap().take();
     crate::window::show(app);
-    result
+    let tokens = result?;
+    if provider == OAuthProvider::Google {
+        let missing: Vec<&str> = tokens
+            .missing(&[GMAIL_SCOPE, GOOGLE_CALENDAR_SCOPE, GOOGLE_CONTACTS_SCOPE])
+            .into_iter()
+            .map(|s| match s {
+                GMAIL_SCOPE => "mail",
+                GOOGLE_CALENDAR_SCOPE => "calendars",
+                _ => "contacts",
+            })
+            .collect();
+        if !missing.is_empty() {
+            return Err(format!(
+                "Google didn't give Moho Mail access to your {}. Sign in again and tick every box on Google's \
+                 permissions page (or “Select all”).",
+                missing.join(" and ")
+            ));
+        }
+    }
+    Ok(tokens)
 }
+
+const GMAIL_SCOPE: &str = "https://mail.google.com/";
+const GOOGLE_CALENDAR_SCOPE: &str = "https://www.googleapis.com/auth/calendar";
+const GOOGLE_CONTACTS_SCOPE: &str = "https://www.googleapis.com/auth/carddav";
 
 #[tauri::command]
 pub fn cancel_oauth(state: State<AppState>) {
