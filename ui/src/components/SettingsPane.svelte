@@ -54,12 +54,37 @@
     }
   }
 
+  // Where to register a client with each provider, and what to create there.
+  // Sign-in redirects to http://127.0.0.1:<any port>/ (localhost for Microsoft).
   const OAUTH_PROVIDERS = [
-    { key: 'google', name: 'Google', secret: true },
-    { key: 'microsoft', name: 'Microsoft', secret: false },
-    { key: 'yahoo', name: 'Yahoo', secret: true },
-    { key: 'aol', name: 'AOL', secret: true },
-    { key: 'fastmail', name: 'Fastmail', secret: false },
+    {
+      key: 'google', name: 'Google', secret: true,
+      links: [
+        { label: 'Create client', url: 'https://console.cloud.google.com/apis/credentials' },
+        { label: 'Enable Gmail API', url: 'https://console.cloud.google.com/apis/library/gmail.googleapis.com' },
+      ],
+      how: 'Create credentials → OAuth client ID → application type “Desktop app”. Enable the Gmail API in the same project.',
+    },
+    {
+      key: 'microsoft', name: 'Microsoft', secret: false,
+      links: [{ label: 'App registrations', url: 'https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade' }],
+      how: 'New registration → add platform “Mobile and desktop applications” with redirect URI http://localhost. No secret is needed.',
+    },
+    {
+      key: 'yahoo', name: 'Yahoo', secret: true,
+      links: [{ label: 'Create app', url: 'https://developer.yahoo.com/apps/create/' }],
+      how: 'Create an app with Mail read/write access. Yahoo may not offer Mail access to new apps; an app password works instead.',
+    },
+    {
+      key: 'aol', name: 'AOL', secret: true,
+      links: [{ label: 'Create app', url: 'https://developer.yahoo.com/apps/create/' }],
+      how: 'AOL accounts sign in through Yahoo, so register the client in Yahoo’s developer console as above.',
+    },
+    {
+      key: 'fastmail', name: 'Fastmail', secret: false,
+      links: [{ label: 'Fastmail OAuth guide', url: 'https://www.fastmail.com/dev/#o-auth-at-fastmail' }],
+      how: 'Fastmail has no self-serve console. Desktop apps can sign in without registering, but Moho Mail doesn’t support that yet; the guide explains manual registration.',
+    },
   ];
 
   const security = (x: string) => ({ tls: 'SSL/TLS', starttls: 'STARTTLS', none: 'none' })[x] ?? x;
@@ -305,16 +330,24 @@
     {:else if section === 'advanced'}
       <h2>Advanced</h2>
       <h3>OAuth clients</h3>
-      <p class="hint">Browser sign-in needs an OAuth client registered with each provider. Builds may include one; enter your own here to override it (for Google, create a “Desktop app” client in Google Cloud Console).</p>
+      <p class="hint">Browser sign-in needs an OAuth client registered with each provider. Builds may include one; to use your own, register it with the provider using the links below and paste its client ID here.</p>
       <div class="card">
         {#each OAUTH_PROVIDERS as p}
           {@const c = s.oauth_clients[p.key]}
-          <div class="oauth-row">
-            <b>{p.name}</b>
-            <input class="text grow-input" placeholder="Client ID" bind:value={c.client_id} onchange={commit} />
-            {#if p.secret}
-              <input class="text" placeholder="Client secret (if any)" value={c.client_secret ?? ''} onchange={(e) => { c.client_secret = (e.currentTarget as HTMLInputElement).value || null; commit(); }} />
-            {/if}
+          <div class="oauth-provider">
+            <div class="oauth-row">
+              <b>{p.name}</b>
+              <input class="text grow-input" placeholder="Client ID" bind:value={c.client_id} onchange={commit} />
+              {#if p.secret}
+                <input class="text" placeholder="Client secret (if any)" value={c.client_secret ?? ''} onchange={(e) => { c.client_secret = (e.currentTarget as HTMLInputElement).value || null; commit(); }} />
+              {/if}
+            </div>
+            <div class="oauth-help">
+              {#each p.links as l}
+                <button class="ext-link" title={l.url} onclick={() => api.openLink(l.url)}>{l.label} <Icon name="open_in_new" size={14} /></button>
+              {/each}
+              <small>{p.how}</small>
+            </div>
           </div>
         {/each}
       </div>
@@ -420,7 +453,13 @@
   .field input[type='color'] { width: 64px; height: 32px; border: 0; background: none; }
   .danger-btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 14px; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-error); color: #fff; font-weight: 600; }
   .err { color: #ffb4ab; font-size: 13px; }
-  .oauth-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; }
+  .oauth-provider { padding: 8px 0; }
+  .oauth-provider + .oauth-provider { border-top: 1px solid var(--md-sys-color-outline-variant); }
+  .oauth-row { display: flex; align-items: center; gap: 10px; }
+  .oauth-help { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; margin: 6px 0 0 100px; }
+  .oauth-help small { flex-basis: 100%; }
+  .ext-link { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--md-sys-color-primary); }
+  .ext-link:hover { text-decoration: underline; }
   .oauth-row b { width: 90px; flex: none; }
   .grow-input { flex: 1; }
   code { font-family: var(--mono); font-size: 12px; background: var(--md-sys-color-surface-container-highest); padding: 1px 6px; border-radius: 4px; }
