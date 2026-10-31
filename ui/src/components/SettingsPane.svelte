@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { folderIcon } from '../lib/format';
+  import { folderIcon, squareIcon } from '../lib/format';
   import { api } from '../lib/api';
   import type { Account, AccountConfig, FolderRole, NotifyMode, RuleField, Settings } from '../lib/types';
 
@@ -30,6 +30,25 @@
     accountError = null;
     const config = await api.accountDetails(a.id);
     editing = { id: a.id, name: config.name, sender_name: config.sender_name, color: config.color, config };
+  }
+
+  async function setIcon(id: string, png: string | null) {
+    try {
+      await api.setAccountIcon(id, png);
+      onaccountschanged();
+    } catch (e) {
+      accountError = String(e);
+    }
+  }
+
+  async function chooseIcon(id: string) {
+    accountError = null;
+    try {
+      const picked = await api.pickImage();
+      if (picked) await setIcon(id, await squareIcon(picked));
+    } catch (e) {
+      accountError = String(e);
+    }
   }
 
   async function saveAccount() {
@@ -157,8 +176,8 @@
       {#if !accounts.length}<p class="hint">No accounts yet. Use the + button in the left rail to add one.</p>{/if}
       {#each accounts as a (a.id)}
         <div class="card account">
-          <span class="glyph" style:background={a.color}>{a.name[0]}</span>
-          <div class="grow"><b>{a.name}</b><small>{a.email}</small></div>
+          <span class="glyph" style:background={a.color}>{#if a.icon}<img src={a.icon} alt="" />{:else}{a.email[0].toUpperCase()}{/if}</span>
+          <div class="grow"><b>{a.email}</b></div>
           <label class="select">
             <Icon name={a.notify === 'muted' ? 'notifications_off' : a.notify === 'important_only' ? 'notification_important' : 'notifications'} size={18} />
             <select value={a.notify} onchange={(e) => onnotify(a.id, (e.currentTarget as HTMLSelectElement).value as NotifyMode)}>
@@ -169,9 +188,16 @@
         </div>
         {#if editing?.id === a.id}
           <div class="card editor">
-            <label class="field">Account name<input class="text" bind:value={editing.name} /></label>
             <label class="field">Your name (From header)<input class="text" bind:value={editing.sender_name} /></label>
             <label class="field">Colour<input type="color" bind:value={editing.color} /></label>
+            <div class="field">
+              Icon
+              <div class="inline">
+                <span class="glyph" style:background={editing.color}>{#if a.icon}<img src={a.icon} alt="" />{:else}{a.email[0].toUpperCase()}{/if}</span>
+                <button class="tonal-btn" onclick={() => chooseIcon(a.id)}><Icon name="image" size={18} /> Choose image…</button>
+                {#if a.icon}<button class="tonal-btn" onclick={() => setIcon(a.id, null)}>Use letter</button>{/if}
+              </div>
+            </div>
             <p class="hint">
               Incoming {editing.config.imap.host}:{editing.config.imap.port} ({security(editing.config.imap.security)}) ·
               Outgoing {editing.config.smtp.host}:{editing.config.smtp.port} ({security(editing.config.smtp.security)}) ·
@@ -230,8 +256,8 @@
       <div class="card">
         {#each accounts as a (a.id)}
           <div class="acct-row">
-            <span class="glyph small" style:background={a.color}>{a.name[0]}</span>
-            <span class="grow">{a.name}</span>
+            <span class="glyph small" style:background={a.color}>{#if a.icon}<img src={a.icon} alt="" />{:else}{a.email[0].toUpperCase()}{/if}</span>
+            <span class="grow">{a.email}</span>
             <div class="segmented">
               {#each modes as m}
                 <button class:on={a.notify === m.mode} onclick={() => onnotify(a.id, m.mode)}>{m.label}</button>
@@ -403,6 +429,8 @@
   .card { background: var(--md-sys-color-surface-container); border-radius: var(--md-sys-shape-corner-large); padding: 8px 16px; margin-bottom: 10px; }
   .account { display: flex; align-items: center; gap: 14px; padding: 12px 16px; }
   .glyph { width: 40px; height: 40px; flex: none; border-radius: 12px; display: grid; place-items: center; font-weight: 800; color: #fff; }
+  .glyph:has(img) { overflow: hidden; }
+  .glyph img { width: 100%; height: 100%; object-fit: cover; }
   .glyph.small { width: 28px; height: 28px; border-radius: 8px; font-size: 13px; }
   .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   small, .hint { color: var(--md-sys-color-on-surface-variant); font-size: 12px; }

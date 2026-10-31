@@ -21,6 +21,8 @@ export interface Account {
   unread: number;
   notify: NotifyMode;
   status: AccountStatus;
+  /** The user's own icon (PNG data URL); the first letter shows without one. */
+  icon: string | null;
 }
 
 export type Security = 'tls' | 'starttls' | 'none';

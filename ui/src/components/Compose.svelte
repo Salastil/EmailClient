@@ -59,7 +59,7 @@
   <div class="fields">
     <label class="row"><span>From</span>
       <select bind:value={f.account_id}>
-        {#each accounts as a}<option value={a.id}>{a.name} &lt;{a.email}&gt;</option>{/each}
+        {#each accounts as a}<option value={a.id}>{a.email}</option>{/each}
       </select>
     </label>
     <div class="row"><span>To</span><AddressInput bind:value={f.to} />

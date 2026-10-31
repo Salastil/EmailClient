@@ -63,3 +63,23 @@ export const providerIcon: Record<Provider, string> = {
   proton: 'P',
   imap: '@',
 };
+
+/** Crop an image to a centred square PNG for an account icon. */
+export function squareIcon(src: string, size = 128): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const side = Math.min(img.naturalWidth || size, img.naturalHeight || size);
+      const canvas = document.createElement('canvas');
+      canvas.width = canvas.height = size;
+      const ctx = canvas.getContext('2d')!;
+      ctx.imageSmoothingQuality = 'high';
+      const sx = ((img.naturalWidth || side) - side) / 2;
+      const sy = ((img.naturalHeight || side) - side) / 2;
+      ctx.drawImage(img, sx, sy, side, side, 0, 0, size, size);
+      resolve(canvas.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('that file could not be read as an image'));
+    img.src = src;
+  });
+}

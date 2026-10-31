@@ -86,8 +86,7 @@
 <aside class="pane" style:width="{width}px" aria-label="Folders">
   <header>
     <div class="title">
-      <span class="name">{account?.name ?? ''}</span>
-      <span class="email">{account?.email ?? ''}</span>
+      <span class="name">{account?.email ?? ''}</span>
     </div>
     <button class="icon-btn" title="Compose" onclick={oncompose}><Icon name="edit_square" /></button>
   </header>
@@ -130,7 +129,7 @@
       <button class="reauth" onclick={onreauth}><Icon name="key" size={18} /> Sign in again</button>
     {/if}
     <footer>
-      <span class="me" style:background={account.color}>{account.email[0].toUpperCase()}</span>
+      <span class="me" style:background={account.color}>{#if account.icon}<img src={account.icon} alt="" />{:else}{account.email[0].toUpperCase()}{/if}</span>
       <div class="who">
         <span class="name">{account.email}</span>
         <span class="status" title={status.title}><span class="dot {status.dot}"></span>{status.text}</span>
@@ -160,7 +159,7 @@
   }
   .title { flex: 1; min-width: 0; display: flex; flex-direction: column; }
   .title .name { font-weight: 700; }
-  .title .email, .who .status {
+  .who .status {
     font-size: 12px;
     color: var(--md-sys-color-on-surface-variant);
     overflow: hidden;
@@ -188,6 +187,7 @@
     padding: 10px 12px;
     background: var(--md-sys-color-surface-container-low);
   }
+  .me img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
   .me {
     width: 32px;
     height: 32px;

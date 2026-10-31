@@ -80,7 +80,7 @@
         {#if eligible.length}
           <label>Account
             <select bind:value={accountId}>
-              {#each eligible as a}<option value={a.id}>{a.name} — {a.email}</option>{/each}
+              {#each eligible as a}<option value={a.id}>{a.email}</option>{/each}
             </select>
           </label>
           <p class="hint">Uses the same sign-in as the mail account, so nothing else to enter.</p>

@@ -125,6 +125,8 @@ pub fn run() {
             commands::send_message,
             commands::complete_address,
             commands::pick_attachments,
+            commands::pick_image,
+            commands::set_account_icon,
             commands::discover_account,
             commands::add_account,
             commands::cancel_oauth,

@@ -423,7 +423,8 @@ pub async fn send_message(draft: Draft, engine: State<'_, SharedEngine>, app: Ap
     let cfg = engine.account(&draft.account_id).ok_or("unknown account")?;
     let mut out = Outgoing {
         from: Address {
-            name: Some(if cfg.sender_name.is_empty() { cfg.name.clone() } else { cfg.sender_name.clone() }),
+            // The account name is a label like "Gmail", never a person's name.
+            name: (!cfg.sender_name.is_empty()).then(|| cfg.sender_name.clone()),
             email: cfg.email.clone(),
         },
         to: smtp::parse_address_list(&draft.to).map_err(err)?,
@@ -525,6 +526,61 @@ pub async fn pick_attachments(app: AppHandle) -> CmdResult<Vec<String>> {
 }
 
 // ----- accounts --------------------------------------------------------------------
+
+/// Let the user pick an image; returns it as a data URL for the UI to crop.
+#[tauri::command]
+pub async fn pick_image(app: AppHandle) -> CmdResult<Option<String>> {
+    use base64::Engine as _;
+    let picked = tauri::async_runtime::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .add_filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"])
+            .blocking_pick_file()
+    })
+    .await
+    .map_err(err)?;
+    let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    if bytes.len() > 10 * 1024 * 1024 {
+        return Err("that image is over 10 MB; pick a smaller one".into());
+    }
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+    let mime = match ext.as_str() {
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "svg" => "image/svg+xml",
+        "bmp" => "image/bmp",
+        "ico" => "image/x-icon",
+        _ => "image/png",
+    };
+    Ok(Some(format!("data:{mime};base64,{}", base64::engine::general_purpose::STANDARD.encode(bytes))))
+}
+
+/// Save an account's icon (a PNG data URL, already cropped by the UI), or
+/// remove it to go back to the letter.
+#[tauri::command]
+pub fn set_account_icon(account_id: String, png: Option<String>, engine: State<SharedEngine>, app: AppHandle) -> CmdResult<()> {
+    use base64::Engine as _;
+    engine.account(&account_id).ok_or("unknown account")?;
+    let path = engine.icon_path(&account_id);
+    match png {
+        Some(url) => {
+            let data = url.strip_prefix("data:image/png;base64,").ok_or("the icon must be a PNG")?;
+            let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(err)?;
+            if !bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+                return Err("the icon must be a PNG".into());
+            }
+            std::fs::create_dir_all(path.parent().unwrap()).map_err(err)?;
+            std::fs::write(&path, bytes).map_err(err)?;
+        }
+        None => {
+            let _ = std::fs::remove_file(&path);
+        }
+    }
+    let _ = app.emit("mail-changed", serde_json::json!({ "account_id": account_id }));
+    Ok(())
+}
 
 #[tauri::command]
 pub async fn discover_account(email: String) -> CmdResult<Discovered> {
@@ -830,7 +886,7 @@ pub fn test_notification(account_id: String, engine: State<SharedEngine>, state:
             Local::now().hour() as u8,
         );
     if notify {
-        let name = engine.account(&account_id).map(|a| a.name).unwrap_or_default();
+        let name = engine.account(&account_id).map(|a| a.email).unwrap_or_default();
         crate::notifications::show_new_mail(&app, &name, vec![msg]);
     }
     Ok(notify)

@@ -30,6 +30,10 @@ pub struct Account {
     pub notify: NotifyMode,
     #[serde(default)]
     pub status: AccountStatus,
+    /// The user's own icon as a `data:image/png` URL; the UI draws the
+    /// address's first letter without one.
+    #[serde(default)]
+    pub icon: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

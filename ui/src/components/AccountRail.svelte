@@ -56,13 +56,17 @@
         <button
           class="avatar"
           style:--accent={a.color}
-          title="{a.name} — {a.email}"
-          aria-label={a.name}
+          title={a.email}
+          aria-label={a.email}
           aria-current={active}
           onclick={() => onselect(a.id)}
           oncontextmenu={(e) => contextMenu(e, a.id)}
         >
-          {providerIcon[a.provider] || a.name[0]}
+          {#if a.icon}
+            <img src={a.icon} alt="" />
+          {:else}
+            {providerIcon[a.provider] || a.email[0].toUpperCase()}
+          {/if}
         </button>
         {#if a.status.state === 'needs_auth' || a.status.state === 'error'}
           <span class="corner alert" title={a.status.message}><Icon name="priority_high" size={12} /></span>
@@ -123,7 +127,7 @@
 {#if ctx}
   {@const acct = accounts.find((a) => a.id === ctx!.id)}
   <div class="menu floating" role="menu" style:left="{ctx.x}px" style:top="{ctx.y}px">
-    <div class="menu-title">Notifications · {acct?.name}</div>
+    <div class="menu-title">Notifications · {acct?.email}</div>
     {#each modes as m}
       <button role="menuitemradio" aria-checked={acct?.notify === m.mode} onclick={() => onnotify(ctx!.id, m.mode)}>
         <Icon name={m.icon} />
@@ -183,6 +187,8 @@
     font-weight: 800;
     font-size: 18px;
   }
+  .avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: inherit; }
+  .avatar:has(img) { overflow: hidden; }
   .avatar:hover, .active .avatar {
     border-radius: var(--md-sys-shape-corner-large);
     background: var(--accent);

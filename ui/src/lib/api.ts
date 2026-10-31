@@ -18,6 +18,8 @@ export const api = {
   copyFolder: (folderId: string, destId: string | null) => invoke<string>('copy_folder', { folderId, destId }),
   deleteFolder: (folderId: string) => invoke<'moved_to_trash' | 'deleted'>('delete_folder', { folderId }),
   markFolderRead: (folderId: string) => invoke<void>('mark_folder_read', { folderId }),
+  pickImage: () => invoke<string | null>('pick_image'),
+  setAccountIcon: (accountId: string, png: string | null) => invoke<void>('set_account_icon', { accountId, png }),
   setFolderImportant: (folderId: string, important: boolean) =>
     invoke<void>('set_folder_important', { folderId, important }),
   getMessage: (id: string, allowRemote = false) => invoke<MessageView>('get_message', { id, allowRemote }),

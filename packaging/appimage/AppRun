@@ -4,7 +4,8 @@
 # Runs the app inside a bubblewrap sandbox when `bwrap` is available. Inside,
 # the system (/usr, /etc) is read-only and almost none of $HOME is visible:
 # only Moho Mail's own XDG directories, the Downloads folder, the autostart
-# folder, and read-only fonts and themes. Network access (it is a mail client)
+# folder, read-only Pictures, Documents and Desktop (to attach files and pick
+# account icons), and read-only fonts and themes. Network access (it is a mail client)
 # and the session D-Bus (keyring, notifications, tray, portals) are kept.
 # Links and attachments open on the host through the desktop portal.
 #
@@ -89,6 +90,13 @@ fi
 if [[ -n "${XAUTHORITY:-}" && -e "$XAUTHORITY" ]]; then
   args+=(--ro-bind "$XAUTHORITY" "$XAUTHORITY")
 fi
+# Folders the file picker may open from, read-only.
+for pair in PICTURES:Pictures DOCUMENTS:Documents DESKTOP:Desktop; do
+  d="$(xdg-user-dir "${pair%%:*}" 2>/dev/null || true)"
+  # xdg-user-dir answers $HOME for folders that were never configured.
+  [[ -n "$d" && "$d" != "$HOME" ]] || d="$HOME/${pair#*:}"
+  [[ "$d" != "$DOWNLOADS" ]] && args+=(--ro-bind-try "$d" "$d")
+done
 IFS=: read -r -a extra <<< "${MOHO_SANDBOX_EXTRA:-}"
 for p in "${extra[@]}"; do
   [[ -n "$p" && -e "$p" ]] && args+=(--bind "$p" "$p")

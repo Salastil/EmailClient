@@ -148,8 +148,20 @@ impl Engine {
         file.save(&self.paths.accounts_file()).map_err(|e| e.to_string())
     }
 
+    /// Where an account's custom icon is kept.
+    pub fn icon_path(&self, id: &str) -> std::path::PathBuf {
+        self.paths.data.join("account-icons").join(format!("{id}.png"))
+    }
+
+    fn account_icon(&self, id: &str) -> Option<String> {
+        use base64::Engine as _;
+        let png = std::fs::read(self.icon_path(id)).ok()?;
+        Some(format!("data:image/png;base64,{}", base64::engine::general_purpose::STANDARD.encode(png)))
+    }
+
     pub fn remove_account(self: &Arc<Self>, id: &str) -> Result<(), String> {
         self.stop_worker(id);
+        let _ = std::fs::remove_file(self.icon_path(id));
         if let Some(cfg) = self.account(id).filter(|c| c.auth == AuthMethod::ProtonBridge) {
             self.proton.logout(&cfg.email);
         }
@@ -176,6 +188,7 @@ impl Engine {
                 unread: store.unread_count(&c.id, FolderRole::Inbox).unwrap_or(0),
                 notify: settings.notify_mode(&c.id),
                 status: statuses.get(&c.id).cloned().unwrap_or_default(),
+                icon: self.account_icon(&c.id),
                 id: c.id,
                 name: c.name,
                 email: c.email,
@@ -429,7 +442,7 @@ impl Engine {
         }
         drop(notified);
         drop(store);
-        let account = self.account(account_id).map(|a| a.name).unwrap_or_default();
+        let account = self.account(account_id).map(|a| a.email).unwrap_or_default();
         crate::notifications::show_new_mail(&self.app, &account, to_show);
     }
 
