@@ -609,8 +609,30 @@ pub fn get_settings(state: State<AppState>) -> Settings {
     state.settings()
 }
 
+fn sync_autostart(paths: &mail_core::paths::AppPaths, enabled: bool) -> CmdResult<()> {
+    let file = paths.autostart_file();
+    if enabled {
+        if let Some(dir) = file.parent() {
+            std::fs::create_dir_all(dir).map_err(err)?;
+        }
+        std::fs::write(
+            &file,
+            "[Desktop Entry]\nType=Application\nName=Moho Mail\nExec=moho-mail\nIcon=moho-mail\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n",
+        )
+        .map_err(err)
+    } else {
+        match std::fs::remove_file(&file) {
+            Err(e) if e.kind() != std::io::ErrorKind::NotFound => Err(err(e)),
+            _ => Ok(()),
+        }
+    }
+}
+
 #[tauri::command]
 pub fn save_settings(settings: Settings, state: State<AppState>, app: AppHandle) -> CmdResult<()> {
+    if settings.tray.autostart != state.settings().tray.autostart {
+        sync_autostart(&state.paths, settings.tray.autostart)?;
+    }
     settings.save(&state.paths.settings_file()).map_err(err)?;
     *state.settings.lock().unwrap() = settings;
     refresh_tray(&app);
@@ -653,6 +675,26 @@ pub fn test_notification(account_id: String, engine: State<SharedEngine>, state:
         crate::notifications::show_new_mail(&app, &name, vec![msg]);
     }
     Ok(notify)
+}
+
+#[derive(Serialize)]
+pub struct AppInfo {
+    pub version: &'static str,
+    pub proton_bridge: Option<&'static str>,
+    pub config_dir: String,
+    pub cache_dir: String,
+    pub data_dir: String,
+}
+
+#[tauri::command]
+pub fn app_info(engine: State<SharedEngine>) -> AppInfo {
+    AppInfo {
+        version: env!("CARGO_PKG_VERSION"),
+        proton_bridge: proton_bridge_sys::available().then_some(proton_bridge_sys::BRIDGE_VERSION),
+        config_dir: engine.paths.config.to_string_lossy().into_owned(),
+        cache_dir: engine.paths.cache.to_string_lossy().into_owned(),
+        data_dir: engine.paths.data.to_string_lossy().into_owned(),
+    }
 }
 
 #[tauri::command]

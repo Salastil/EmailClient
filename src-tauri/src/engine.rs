@@ -119,6 +119,9 @@ impl Engine {
 
     pub fn remove_account(self: &Arc<Self>, id: &str) -> Result<(), String> {
         self.stop_worker(id);
+        if let Some(cfg) = self.account(id).filter(|c| c.auth == AuthMethod::ProtonBridge) {
+            self.proton.logout(&cfg.email);
+        }
         {
             let mut file = self.accounts.write().unwrap();
             file.accounts.retain(|a| a.id != id);
@@ -212,6 +215,10 @@ impl Engine {
     // ----- workers -------------------------------------------------------------
 
     pub fn start_all(self: &Arc<Self>) {
+        let engine = Arc::clone(self);
+        let configs = self.account_configs();
+        // Start the Proton bridge before the workers need it, off the UI thread.
+        tauri::async_runtime::spawn_blocking(move || engine.proton.start_if_needed(&configs));
         for cfg in self.account_configs() {
             self.start_worker(&cfg.id);
         }

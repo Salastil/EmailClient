@@ -6,11 +6,17 @@ pkgdesc='Email and calendar client with a four-column layout (Tauri + WebKitGTK)
 arch=('x86_64' 'aarch64')
 url='https://github.com/salastil/emailclient'
 license=('GPL-3.0-or-later')
-depends=('webkit2gtk-4.1' 'gtk3' 'libsecret' 'openssl' 'dbus' 'hicolor-icon-theme')
-makedepends=('rust' 'cargo' 'pnpm' 'nodejs')
+depends=('webkit2gtk-4.1' 'gtk3' 'libsecret' 'dbus' 'hicolor-icon-theme')
+optdepends=('gnome-keyring: stores passwords (or another Secret Service such as KeePassXC or KWallet)'
+            'xdg-desktop-portal: native file pickers')
+makedepends=('rust' 'cargo' 'go' 'pnpm' 'nodejs')
 options=('!lto')
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+# Proton Mail Bridge (GPL-3.0) is compiled into the app; keep in sync with
+# crates/proton-bridge-sys/build.rs.
+_bridgever=3.27.1
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+        "proton-bridge::git+https://github.com/ProtonMail/proton-bridge.git#tag=v$_bridgever")
+sha256sums=('SKIP' 'SKIP')
 _srcdir="emailclient-$pkgver"
 
 prepare() {
@@ -18,19 +24,25 @@ prepare() {
   export CARGO_HOME="$srcdir/cargo-home"
   cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
   pnpm install --frozen-lockfile
+  export GOPATH="$srcdir/go" GOTOOLCHAIN=auto
+  (cd "$srcdir/proton-bridge" && go mod download)
 }
 
 build() {
   cd "$_srcdir"
   export CARGO_HOME="$srcdir/cargo-home"
   export CARGO_TARGET_DIR=target
-  pnpm tauri build --no-bundle
+  export GOPATH="$srcdir/go" GOTOOLCHAIN=auto GOFLAGS="-modcacherw"
+  export PROTON_BRIDGE_SRC="$srcdir/proton-bridge" PROTON_BRIDGE_VERSION="$_bridgever"
+  # Optional: OAuth clients registered for this build, e.g.
+  #   export MOHO_GOOGLE_CLIENT_ID=... MOHO_GOOGLE_CLIENT_SECRET=... MOHO_MICROSOFT_CLIENT_ID=...
+  pnpm tauri build --no-bundle --features proton-bridge
 }
 
 check() {
   cd "$_srcdir"
   export CARGO_HOME="$srcdir/cargo-home"
-  cargo test --frozen -p mail-core
+  cargo test --frozen -p mail-core -p providers -p pim
 }
 
 package() {

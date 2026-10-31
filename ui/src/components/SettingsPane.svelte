@@ -287,6 +287,10 @@
           <input type="checkbox" class="switch" bind:checked={s.tray.minimize_to_tray} onchange={commit} />
         </label>
         <label class="switch-row">
+          <div class="grow"><b>Start when I log in</b><small>Adds Moho Mail to your desktop's autostart</small></div>
+          <input type="checkbox" class="switch" bind:checked={s.tray.autostart} onchange={commit} />
+        </label>
+        <label class="switch-row">
           <div class="grow"><b>Start hidden in the tray</b><small>Useful with autostart</small></div>
           <input type="checkbox" class="switch" bind:checked={s.tray.start_minimized} onchange={commit} />
         </label>
@@ -319,8 +323,14 @@
     {:else}
       <h2>About Moho Mail</h2>
       <div class="card about">
-        <p>Version 0.1.0 · GPL-3.0-or-later</p>
-        <p>Rendering with WebKitGTK. Settings are stored in <code>~/.config/moho-mail</code>, caches in <code>~/.cache/moho-mail</code>, and passwords in your system keyring.</p>
+        {#await api.appInfo() then info}
+          <p>Version {info.version} · GPL-3.0-or-later · rendering with WebKitGTK</p>
+          <p>Proton Mail: {info.proton_bridge ? `built-in bridge ${info.proton_bridge}` : 'not included in this build'}</p>
+          <p>Settings <code>{info.config_dir}</code></p>
+          <p>Cache (safe to delete) <code>{info.cache_dir}</code></p>
+          <p>Local calendars, contacts and the Proton vault <code>{info.data_dir}</code></p>
+          <p>Passwords and sign-in tokens are kept in your system keyring.</p>
+        {/await}
       </div>
     {/if}
   </div>

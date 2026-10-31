@@ -87,6 +87,11 @@ impl AppPaths {
         self.cache.join("proton")
     }
 
+    /// `$XDG_CONFIG_HOME/autostart/moho-mail.desktop` (XDG Autostart spec).
+    pub fn autostart_file(&self) -> PathBuf {
+        self.config.parent().unwrap_or(&self.config).join("autostart").join(format!("{APP_DIR}.desktop"))
+    }
+
     pub fn log_dir(&self) -> PathBuf {
         self.state.join("logs")
     }
@@ -137,6 +142,7 @@ mod tests {
         assert_eq!(p.data, Path::new("/home/u/.local/share/moho-mail"));
         assert_eq!(p.state, Path::new("/home/u/.local/state/moho-mail"));
         assert_eq!(p.runtime, None);
+        assert_eq!(p.autostart_file(), Path::new("/home/u/.config/autostart/moho-mail.desktop"));
     }
 
     #[test]

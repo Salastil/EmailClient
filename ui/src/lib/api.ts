@@ -34,6 +34,8 @@ export const api = {
   setAccountNotify: (accountId: string, mode: NotifyMode) => invoke<void>('set_account_notify', { accountId, mode }),
   testNotification: (accountId: string) => invoke<boolean>('test_notification', { accountId }),
   quit: () => invoke<void>('quit'),
+  appInfo: () =>
+    invoke<{ version: string; proton_bridge: string | null; config_dir: string; cache_dir: string; data_dir: string }>('app_info'),
 };
 
 

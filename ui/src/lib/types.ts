@@ -143,7 +143,7 @@ export type RuleField = 'sender' | 'domain' | 'subject';
 
 export interface Settings {
   layout: { folders_width: number; list_width: number };
-  tray: { close_to_tray: boolean; minimize_to_tray: boolean; start_minimized: boolean };
+  tray: { close_to_tray: boolean; minimize_to_tray: boolean; start_minimized: boolean; autostart: boolean };
   privacy: { load_remote_images: boolean };
   notifications: {
     do_not_disturb: boolean;

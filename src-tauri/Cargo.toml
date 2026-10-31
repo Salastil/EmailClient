@@ -16,6 +16,7 @@ tauri-build = { version = "2", features = [] }
 mail-core = { path = "../crates/mail-core" }
 providers = { path = "../crates/providers" }
 pim = { path = "../crates/pim" }
+proton-bridge-sys = { path = "../crates/proton-bridge-sys" }
 tauri = { version = "2", features = ["image-png"] }
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
@@ -25,8 +26,14 @@ tokio = { version = "1", features = ["sync", "time", "macros", "rt-multi-thread"
 notify-rust = "4"
 tracing = "0.1"
 url = "2"
+rand = "0.8"
+base64 = "0.22"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ksni = { version = "0.3", features = ["blocking"] }
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true
+
+[features]
+# Build Proton Mail Bridge into the app (needs Go and PROTON_BRIDGE_SRC; see README).
+proton-bridge = ["proton-bridge-sys/bundled"]

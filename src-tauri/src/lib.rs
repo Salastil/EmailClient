@@ -108,6 +108,7 @@ pub fn run() {
             commands::set_account_notify,
             commands::test_notification,
             commands::quit,
+            commands::app_info,
             pim::pim_sources,
             pim::update_source,
             pim::remove_source,
@@ -122,6 +123,13 @@ pub fn run() {
             pim::save_contact,
             pim::add_calendar_account,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running Moho Mail");
+        .build(tauri::generate_context!())
+        .expect("error while building Moho Mail")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                if let Some(engine) = app.try_state::<engine::SharedEngine>() {
+                    engine.proton.shutdown();
+                }
+            }
+        });
 }

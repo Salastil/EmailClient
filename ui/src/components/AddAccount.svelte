@@ -96,7 +96,14 @@
       });
       onadded(account);
     } catch (e) {
-      error = String(e);
+      const msg = String(e);
+      if (msg.includes('needs:totp')) {
+        error = msg.includes('not accepted') ? 'That two-factor code was not accepted. Try the current one.' : 'Enter the 6-digit code from your authenticator app.';
+      } else if (msg.includes('needs:mailbox_password')) {
+        error = msg.includes('not accepted') ? 'That mailbox password was not accepted.' : 'This account uses two-password mode: enter your mailbox password.';
+      } else {
+        error = msg;
+      }
       if (step === 'waiting') step = 'details';
     } finally {
       busy = false;

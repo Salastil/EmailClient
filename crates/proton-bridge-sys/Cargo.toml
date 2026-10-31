@@ -1,0 +1,16 @@
+[package]
+name = "proton-bridge-sys"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Proton Mail Bridge running in-process, built from Proton's GPLv3 source"
+links = "protonbridge"
+build = "build.rs"
+
+[features]
+# Build Proton's bridge from source (needs Go and PROTON_BRIDGE_SRC).
+bundled = []
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true

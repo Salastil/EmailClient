@@ -37,11 +37,13 @@ pub struct TraySettings {
     pub close_to_tray: bool,
     pub minimize_to_tray: bool,
     pub start_minimized: bool,
+    /// Launch at login via `$XDG_CONFIG_HOME/autostart/moho-mail.desktop`.
+    pub autostart: bool,
 }
 
 impl Default for TraySettings {
     fn default() -> Self {
-        Self { close_to_tray: true, minimize_to_tray: true, start_minimized: false }
+        Self { close_to_tray: true, minimize_to_tray: true, start_minimized: false, autostart: false }
     }
 }
 
