@@ -474,6 +474,29 @@ fn default_name(provider: Provider, email: &str) -> String {
     }
 }
 
+/// Sign in through the built-in Proton bridge. When Proton asks for a CAPTCHA,
+/// open it in the browser; the next attempt carries the solved challenge.
+async fn proton_login(
+    app: &AppHandle,
+    engine: &SharedEngine,
+    email: &str,
+    password: Option<&str>,
+    totp: Option<&str>,
+    mailbox_password: Option<&str>,
+) -> CmdResult<()> {
+    let e = match engine.proton.login(email, password.unwrap_or(""), totp, mailbox_password).await {
+        Ok(()) => return Ok(()),
+        Err(e) => e.to_string(),
+    };
+    if let Some((_, url)) = e.split_once("needs:human_verification ") {
+        if let Err(open) = crate::launch::open_url(app, url.trim()).await {
+            tracing::warn!("opening the Proton CAPTCHA: {open}");
+        }
+        return Err(format!("needs:human_verification {}", url.trim()));
+    }
+    Err(e)
+}
+
 /// Run the browser sign-in and return tokens. Cancels with `cancel_oauth`.
 async fn browser_sign_in(app: &AppHandle, engine: &SharedEngine, provider: OAuthProvider, hint: &str) -> CmdResult<oauth::Tokens> {
     let pending = oauth::begin(provider, &engine.oauth_client(provider), Some(hint), None).await.map_err(err)?;
@@ -518,11 +541,8 @@ pub async fn add_account(input: NewAccount, engine: State<'_, SharedEngine>, app
     if input.proton {
         cfg.auth = AuthMethod::ProtonBridge;
         cfg.provider = Provider::Proton;
-        engine
-            .proton
-            .login(&email, input.password.as_deref().unwrap_or(""), input.totp.as_deref(), input.mailbox_password.as_deref())
-            .await
-            .map_err(err)?;
+        proton_login(&app, &engine, &email, input.password.as_deref(), input.totp.as_deref(), input.mailbox_password.as_deref())
+            .await?;
     } else if let Some(provider) = input.oauth {
         let tokens = browser_sign_in(&app, &engine, provider, &email).await?;
         if let Some(e) = tokens.email.as_deref().filter(|e| !e.eq_ignore_ascii_case(&email)) {
@@ -575,11 +595,7 @@ pub async fn reauthenticate(
             engine.remember_tokens(&cfg.id, tokens).await;
         }
         AuthMethod::ProtonBridge => {
-            engine
-                .proton
-                .login(&cfg.email, password.as_deref().unwrap_or(""), totp.as_deref(), mailbox_password.as_deref())
-                .await
-                .map_err(err)?;
+            proton_login(&app, &engine, &cfg.email, password.as_deref(), totp.as_deref(), mailbox_password.as_deref()).await?;
         }
     }
     engine.wake(Some(&cfg.id));

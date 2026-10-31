@@ -36,6 +36,8 @@
   let showServers = $state(false);
   let busy = $state(false);
   let error = $state<string | null>(null);
+  /** Proton's CAPTCHA page, while the user is solving it. */
+  let verifyUrl = $state<string | null>(null);
   let authUrl = $state<string | null>(null);
   let copied = $state(false);
 
@@ -97,7 +99,11 @@
       onadded(account);
     } catch (e) {
       const msg = String(e);
-      if (msg.includes('needs:totp')) {
+      verifyUrl = null;
+      if (msg.includes('needs:human_verification')) {
+        verifyUrl = msg.split('needs:human_verification ')[1]?.trim() || null;
+        error = 'Proton wants to check that you are human. Solve the CAPTCHA that opened in your browser, then press Connect again.';
+      } else if (msg.includes('needs:totp')) {
         error = msg.includes('not accepted') ? 'That two-factor code was not accepted. Try the current one.' : 'Enter the 6-digit code from your authenticator app.';
       } else if (msg.includes('needs:mailbox_password')) {
         error = msg.includes('not accepted') ? 'That mailbox password was not accepted.' : 'This account uses two-password mode: enter your mailbox password.';
@@ -202,7 +208,15 @@
     </div>
   {/if}
 
-  {#if error}<p class="error"><Icon name="error" size={18} /> {error}</p>{/if}
+  {#if error}
+    <p class="error">
+      <Icon name="error" size={18} />
+      <span>
+        {error}
+        {#if verifyUrl}<button class="link" onclick={() => api.openLink(verifyUrl!)}>Open the CAPTCHA again</button>{/if}
+      </span>
+    </p>
+  {/if}
 
   {#snippet actions()}
     {#if step === 'email'}
@@ -239,6 +253,7 @@
   input:focus { border: 2px solid var(--md-sys-color-primary); }
   .note { display: flex; gap: 8px; align-items: center; font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin: 0 0 12px; }
   .error { display: flex; gap: 8px; align-items: flex-start; color: #ffb4ab; font-size: 13px; margin: 12px 0 0; user-select: text; }
+  .error .link { display: block; margin-top: 4px; color: var(--md-sys-color-primary); text-decoration: underline; }
   .link { color: var(--md-sys-color-primary); font-size: 13px; align-self: center; }
   .link:hover { text-decoration: underline; }
   .servers-toggle { display: flex; align-items: center; gap: 4px; margin-top: 14px; color: var(--md-sys-color-on-surface-variant); }

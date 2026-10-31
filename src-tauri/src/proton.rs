@@ -3,6 +3,7 @@
 //! our XDG directories with the key in the Secret Service, and serves
 //! IMAP/SMTP on loopback ports that only this process connects to.
 
+use std::collections::HashMap;
 use std::sync::Mutex;
 
 use base64::Engine as _;
@@ -22,6 +23,9 @@ pub struct ProtonBridge {
     status: Mutex<Option<Status>>,
     /// Serializes startup so concurrent callers start the bridge once.
     starting: Mutex<()>,
+    /// CAPTCHA challenge per address. Proton accepts the next sign-in once
+    /// the user has solved it in the browser, if the attempt carries it.
+    hv_tokens: Mutex<HashMap<String, String>>,
 }
 
 fn other(e: impl std::fmt::Display) -> Error {
@@ -37,6 +41,7 @@ impl ProtonBridge {
             cache: s(paths.proton_cache_dir()),
             status: Mutex::new(None),
             starting: Mutex::new(()),
+            hv_tokens: Mutex::new(HashMap::new()),
         }
     }
 
@@ -100,22 +105,35 @@ impl ProtonBridge {
         Ok(Credentials::Password { user: email.to_string(), password: info.bridge_pass })
     }
 
-    /// Sign in. Errors starting with `needs:` tell the UI what to ask for next.
+    /// Sign in. Errors starting with `needs:` tell the UI what to ask for next;
+    /// `needs:human_verification <url>` means: solve the CAPTCHA at url, then retry.
     pub async fn login(&self, email: &str, password: &str, totp: Option<&str>, mailbox_password: Option<&str>) -> Result<(), Error> {
         self.started().await?;
+        let key = email.trim().to_lowercase();
+        let hv = self.hv_tokens.lock().unwrap().get(&key).cloned();
         let step = tokio::task::block_in_place(|| {
-            bridge::login(email, password, totp.filter(|t| !t.is_empty()), mailbox_password.filter(|m| !m.is_empty()), None)
+            bridge::login(
+                email,
+                password,
+                totp.filter(|t| !t.is_empty()),
+                mailbox_password.filter(|m| !m.is_empty()),
+                hv.as_deref(),
+            )
         })
         .map_err(|e| Error::Auth(e.to_string()))?;
         match step {
-            LoginStep::Done { .. } => Ok(()),
+            LoginStep::Done { .. } => {
+                self.hv_tokens.lock().unwrap().remove(&key);
+                Ok(())
+            }
             LoginStep::NeedTotp { error } => Err(Error::Auth(format!("needs:totp{}", error.map(|e| format!(": {e}")).unwrap_or_default()))),
             LoginStep::NeedMailboxPassword { error } => {
                 Err(Error::Auth(format!("needs:mailbox_password{}", error.map(|e| format!(": {e}")).unwrap_or_default())))
             }
-            LoginStep::NeedHumanVerification { url, .. } => Err(Error::Auth(format!(
-                "Proton asked for a CAPTCHA. Open {url} in your browser, or sign in once at account.proton.me from this network, then try again."
-            ))),
+            LoginStep::NeedHumanVerification { url, token } => {
+                self.hv_tokens.lock().unwrap().insert(key, token);
+                Err(Error::Auth(format!("needs:human_verification {url}")))
+            }
         }
     }
 

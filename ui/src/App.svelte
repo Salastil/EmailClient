@@ -64,6 +64,9 @@
   function friendly(msg: string): string {
     if (msg.includes('needs:totp')) return 'Enter the two-factor code from your authenticator app.';
     if (msg.includes('needs:mailbox_password')) return 'Enter your Proton mailbox password.';
+    if (msg.includes('needs:human_verification')) {
+      return 'Proton wants to check that you are human. Solve the CAPTCHA that opened in your browser, then sign in again.';
+    }
     return msg;
   }
 

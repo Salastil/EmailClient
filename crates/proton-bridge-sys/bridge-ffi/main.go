@@ -23,6 +23,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"slices"
 	"strings"
 	"sync"
 	"unsafe"
@@ -321,7 +322,12 @@ func moho_bridge_login(email, password, totp, mailboxPassword, hvToken *C.char) 
 			if hv.IsHvRequest(err) {
 				details, _ := hv.VerifyAndExtractHvRequest(err)
 				if details != nil {
-					return reply(map[string]any{"need": "human_verification", "url": hv.FormatHvURL(details), "token": details.Token})
+					// Handed back verbatim on the retry, in the "method:token" form parsed above.
+					method := "captcha"
+					if len(details.Methods) > 0 && !slices.Contains(details.Methods, method) {
+						method = details.Methods[0]
+					}
+					return reply(map[string]any{"need": "human_verification", "url": hv.FormatHvURL(details), "token": method + ":" + details.Token})
 				}
 			}
 			if errors.Is(err, bridge.ErrUserAlreadyLoggedIn) {
