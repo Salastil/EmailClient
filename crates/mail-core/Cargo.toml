@@ -15,6 +15,8 @@ ammonia = "4"
 rusqlite = "0.37"
 mail-parser = "0.11"
 keyring = { version = "3.6", features = ["sync-secret-service", "crypto-rust"] }
+# Same libdbus binding the keyring backend uses; starts a keyring daemon on demand.
+dbus = "0.9"
 uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
