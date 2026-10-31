@@ -652,9 +652,13 @@ fn sync_autostart(paths: &mail_core::paths::AppPaths, enabled: bool) -> CmdResul
         if let Some(dir) = file.parent() {
             std::fs::create_dir_all(dir).map_err(err)?;
         }
+        // From an AppImage, start that file: there is no `moho-mail` on PATH.
+        let exec = std::env::var("APPIMAGE").map(|p| format!("\"{p}\"")).unwrap_or_else(|_| "moho-mail".into());
         std::fs::write(
             &file,
-            "[Desktop Entry]\nType=Application\nName=Moho Mail\nExec=moho-mail\nIcon=moho-mail\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n",
+            format!(
+                "[Desktop Entry]\nType=Application\nName=Moho Mail\nExec={exec}\nIcon=moho-mail\nX-GNOME-Autostart-enabled=true\nNoDisplay=true\n"
+            ),
         )
         .map_err(err)
     } else {

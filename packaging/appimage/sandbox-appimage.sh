@@ -21,6 +21,11 @@ root="$work/squashfs-root"
 mv "$root/AppRun" "$root/AppRun.unsandboxed"
 install -m 0755 "$here/AppRun" "$root/AppRun"
 
+# Ship our desktop entry instead of the minimal one Tauri generates (proper
+# name, mailto: handler); desktop integration tools read it from the AppImage.
+desktop="$(ls "$root"/*.desktop | head -1)"
+install -m 0644 "$here/../linux/moho-mail.desktop" "$desktop"
+
 # appimagetool insists that everything is readable by all users; some files
 # come out of the build as 0700. `X` only adds execute to directories and to
 # files that are already executable.
