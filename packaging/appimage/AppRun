@@ -5,7 +5,9 @@
 # the system (/usr, /etc) is read-only and almost none of $HOME is visible:
 # only Moho Mail's own XDG directories, the Downloads folder, the autostart
 # folder, read-only Pictures, Documents and Desktop (to attach files and pick
-# account icons), and read-only fonts and themes. Network access (it is a mail client)
+# account icons), and read-only fonts and themes. To the desktop portal it
+# looks like a Flatpak app (st.moho.mail), so the host's file chooser can hand
+# over any file the user picks, one at a time, through the document portal. Network access (it is a mail client)
 # and the session D-Bus (keyring, notifications, tray, portals) are kept.
 # Links and attachments open on the host through the desktop portal.
 #
@@ -101,6 +103,21 @@ IFS=: read -r -a extra <<< "${MOHO_SANDBOX_EXTRA:-}"
 for p in "${extra[@]}"; do
   [[ -n "$p" && -e "$p" ]] && args+=(--bind "$p" "$p")
 done
+# The portal recognises a sandboxed app by /.flatpak-info and the bwrap info
+# file Flatpak keeps under $XDG_RUNTIME_DIR/.flatpak/<instance>; files chosen
+# in its file chooser then appear under $XDG_RUNTIME_DIR/doc.
+instance="moho-$$"
+instances="$XDG_RUNTIME_DIR/.flatpak"
+for d in "$instances"/moho-*; do
+  [[ -d "$d" && ! -e "/proc/${d##*-}" ]] && rm -rf "$d"
+done
+mkdir -p "$instances/$instance"
+flatpak_info=$'[Application]\nname=st.moho.mail\n\n[Instance]\ninstance-id='"$instance"$'\n'
+args+=(--bind-try "$XDG_RUNTIME_DIR/doc" "$XDG_RUNTIME_DIR/doc")
+# Free descriptor numbers: low ones may belong to the AppImage runtime, which
+# unmounts the image when they close.
+exec {info_in}<<<"$flatpak_info" {info_out}>"$instances/$instance/bwrapinfo.json"
+args+=(--ro-bind-data "$info_in" /.flatpak-info --info-fd "$info_out")
 args+=(--setenv MOHO_SANDBOXED 1)
 
 exec bwrap "${args[@]}" -- "$INNER" "$@"

@@ -18,7 +18,6 @@ use providers::smtp::{self, Outgoing, OutgoingAttachment};
 use providers::{imap, oauth, Credentials};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_dialog::DialogExt;
 
 use crate::engine::{important_folders, in_important_folder, Engine, SharedEngine};
 use crate::state::AppState;
@@ -199,12 +198,9 @@ pub async fn open_attachment(id: String, index: usize, engine: State<'_, SharedE
 #[tauri::command]
 pub async fn save_attachment(id: String, index: usize, engine: State<'_, SharedEngine>, app: AppHandle) -> CmdResult<Option<String>> {
     let (name, bytes) = attachment_bytes(&engine, &id, index).await?;
-    let picked = tauri::async_runtime::spawn_blocking(move || app.dialog().file().set_file_name(&name).blocking_save_file())
-        .await
-        .map_err(err)?;
-    let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    let Some(path) = crate::launch::save_file(&app, "Save attachment", &name).await? else { return Ok(None) };
     std::fs::write(&path, bytes).map_err(err)?;
-    Ok(Some(path.to_string_lossy().into_owned()))
+    Ok(Some(crate::launch::shown_path(&path)))
 }
 
 // ----- message actions ---------------------------------------------------------
@@ -353,12 +349,9 @@ pub async fn save_message(id: String, engine: State<'_, SharedEngine>, app: AppH
         name = "message".into();
     }
     let name = format!("{name}.eml");
-    let picked = tauri::async_runtime::spawn_blocking(move || app.dialog().file().set_file_name(&name).blocking_save_file())
-        .await
-        .map_err(err)?;
-    let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    let Some(path) = crate::launch::save_file(&app, "Save message", &name).await? else { return Ok(None) };
     std::fs::write(&path, raw).map_err(err)?;
-    Ok(Some(path.to_string_lossy().into_owned()))
+    Ok(Some(crate::launch::shown_path(&path)))
 }
 
 #[tauri::command]
@@ -514,15 +507,8 @@ pub fn complete_address(prefix: String, engine: State<SharedEngine>, app: AppHan
 
 #[tauri::command]
 pub async fn pick_attachments(app: AppHandle) -> CmdResult<Vec<String>> {
-    let picked = tauri::async_runtime::spawn_blocking(move || app.dialog().file().blocking_pick_files())
-        .await
-        .map_err(err)?;
-    Ok(picked
-        .unwrap_or_default()
-        .into_iter()
-        .filter_map(|p| p.into_path().ok())
-        .map(|p| p.to_string_lossy().into_owned())
-        .collect())
+    let picked = crate::launch::pick_files(&app, "Attach files", false, true).await?;
+    Ok(picked.into_iter().map(|p| p.to_string_lossy().into_owned()).collect())
 }
 
 // ----- accounts --------------------------------------------------------------------
@@ -531,15 +517,8 @@ pub async fn pick_attachments(app: AppHandle) -> CmdResult<Vec<String>> {
 #[tauri::command]
 pub async fn pick_image(app: AppHandle) -> CmdResult<Option<String>> {
     use base64::Engine as _;
-    let picked = tauri::async_runtime::spawn_blocking(move || {
-        app.dialog()
-            .file()
-            .add_filter("Images", &["png", "jpg", "jpeg", "gif", "webp", "svg", "bmp", "ico"])
-            .blocking_pick_file()
-    })
-    .await
-    .map_err(err)?;
-    let Some(path) = picked.and_then(|p| p.into_path().ok()) else { return Ok(None) };
+    let picked = crate::launch::pick_files(&app, "Choose an icon", true, false).await?;
+    let Some(path) = picked.into_iter().next() else { return Ok(None) };
     let bytes = std::fs::read(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     if bytes.len() > 10 * 1024 * 1024 {
         return Err("that image is over 10 MB; pick a smaller one".into());
