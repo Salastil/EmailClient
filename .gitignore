@@ -8,3 +8,4 @@ node_modules/
 !/packaging/arch*/PKGBUILD
 *.pkg.tar.*
 /third_party
+/dist
