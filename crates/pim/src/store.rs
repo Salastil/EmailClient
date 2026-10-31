@@ -31,6 +31,8 @@ pub enum Backend {
     DavOAuth,
     /// Microsoft Graph using its own OAuth grant.
     Graph,
+    /// A read-only iCalendar feed; its address is kept in the keyring.
+    Ics,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

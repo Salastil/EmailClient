@@ -1,12 +1,12 @@
 <script lang="ts">
   import Dialog from './Dialog.svelte';
   import Icon from './Icon.svelte';
-  import { pim } from '../lib/api';
+  import { api, pim } from '../lib/api';
   import type { Account, CalendarAccountInput } from '../lib/types';
 
   let { accounts, onclose }: { accounts: Account[]; onclose: () => void } = $props();
 
-  type Kind = 'mail' | 'microsoft' | 'nextcloud' | 'icloud' | 'fastmail' | 'caldav';
+  type Kind = 'mail' | 'microsoft' | 'nextcloud' | 'icloud' | 'fastmail' | 'caldav' | 'ics';
   const options: { kind: Kind; name: string; hint: string; icon: string }[] = [
     { kind: 'mail', name: 'Google or Fastmail account', hint: 'Use a mail account you already added', icon: 'account_circle' },
     { kind: 'microsoft', name: 'Microsoft 365 / Outlook.com', hint: 'Signs in with your browser', icon: 'window' },
@@ -14,6 +14,7 @@
     { kind: 'icloud', name: 'iCloud', hint: 'Apple ID and app-specific password', icon: 'phone_iphone' },
     { kind: 'fastmail', name: 'Fastmail (app password)', hint: 'Calendars and contacts', icon: 'mail' },
     { kind: 'caldav', name: 'Other CalDAV / CardDAV', hint: 'Radicale, Baïkal, mailbox.org, SOGo…', icon: 'dns' },
+    { kind: 'ics', name: 'Subscribe by address (iCal)', hint: 'Read-only; Google Calendar’s secret address works without signing in', icon: 'rss_feed' },
   ];
 
   let kind = $state<Kind | null>(null);
@@ -39,6 +40,7 @@
       case 'nextcloud': input = { kind: 'nextcloud', server }; break;
       case 'icloud': input = { kind: 'icloud', username, password }; break;
       case 'fastmail': input = { kind: 'fastmail', username, password }; break;
+      case 'ics': input = { kind: 'ics', url, name }; break;
       default: input = { kind: 'caldav', url, username, password, name };
     }
     busy = true;
@@ -56,7 +58,11 @@
 
 <Dialog title={done !== null ? 'Calendars added' : 'Add calendars and contacts'} {onclose} width={560}>
   {#if done !== null}
-    <p>Added {done} {done === 1 ? 'calendar or address book' : 'calendars and address books'}. They will stay in sync automatically.</p>
+    {#if kind === 'ics'}
+      <p>Subscribed. Moho Mail checks the address for changes automatically; events can't be edited here.</p>
+    {:else}
+      <p>Added {done} {done === 1 ? 'calendar or address book' : 'calendars and address books'}. They will stay in sync automatically.</p>
+    {/if}
   {:else if !kind}
     <div class="list">
       {#each options as o}
@@ -83,6 +89,16 @@
         {/if}
       {:else if kind === 'microsoft'}
         <p class="hint">Your browser will open so you can allow Moho Mail to read and edit your Outlook calendars.</p>
+      {:else if kind === 'ics'}
+        <label>Calendar address<input bind:value={url} placeholder="https://calendar.google.com/calendar/ical/…/basic.ics" /></label>
+        <label>Name (optional)<input bind:value={name} /></label>
+        <p class="hint">
+          For Google Calendar: open calendar.google.com → Settings → pick the calendar → Integrate calendar → copy
+          “Secret address in iCal format”. Keep it private: anyone with it can see your events.
+        </p>
+        <button type="button" class="link" onclick={() => api.openLink('https://calendar.google.com/calendar/r/settings')}>
+          Open Google Calendar settings <Icon name="open_in_new" size={14} />
+        </button>
       {:else if kind === 'nextcloud'}
         <label>Server address<input bind:value={server} placeholder="cloud.example.com" /></label>
         <p class="hint">Your browser will open for you to approve access; Nextcloud then gives Moho Mail an app password.</p>
@@ -123,5 +139,6 @@
     height: 42px; padding: 0 12px; border: 1px solid var(--md-sys-color-outline); border-radius: var(--md-sys-shape-corner-small);
     background: var(--md-sys-color-surface-container); color: var(--md-sys-color-on-surface); outline: 0;
   }
+  .link { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; color: var(--md-sys-color-primary); font-size: 13px; }
   .error { display: flex; gap: 8px; color: #ffb4ab; font-size: 13px; margin: 0; }
 </style>

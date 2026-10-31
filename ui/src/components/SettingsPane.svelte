@@ -62,8 +62,10 @@
       links: [
         { label: 'Create client', url: 'https://console.cloud.google.com/apis/credentials' },
         { label: 'Enable Gmail API', url: 'https://console.cloud.google.com/apis/library/gmail.googleapis.com' },
+        { label: 'Enable CalDAV API', url: 'https://console.cloud.google.com/apis/library/caldav.googleapis.com' },
+        { label: 'Enable CardDAV API', url: 'https://console.cloud.google.com/apis/library/carddav.googleapis.com' },
       ],
-      how: 'Create credentials → OAuth client ID → application type “Desktop app”. Enable the Gmail API in the same project.',
+      how: 'Create credentials → OAuth client ID → application type “Desktop app”. In the same project, enable the Gmail API, plus CalDAV and CardDAV for calendars and contacts.',
     },
     {
       key: 'microsoft', name: 'Microsoft', secret: false,

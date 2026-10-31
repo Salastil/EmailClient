@@ -1,7 +1,9 @@
 //! Calendars, tasks and contacts: iCalendar/vCard, CalDAV/CardDAV,
-//! Microsoft Graph calendars, Nextcloud sign-in and the local store.
+//! Microsoft Graph calendars, iCal subscriptions, Nextcloud sign-in and the
+//! local store.
 
 pub mod dav;
+pub mod feed;
 pub mod graph;
 pub mod ical;
 pub mod nextcloud;

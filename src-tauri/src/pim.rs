@@ -184,6 +184,12 @@ impl Pim {
                     .map(|(id, ev)| pim::store::event_object(&ev, &id, ""))
                     .collect()
             }
+            Backend::Ics => {
+                let login = s.account_id.as_deref().ok_or("subscription has no address")?;
+                let url = secrets::load_named(&secret_name(login)).map_err(err)?;
+                let feed = pim::feed::fetch(&url).await.map_err(err)?;
+                feed_objects(&feed)
+            }
         };
         self.store.lock().unwrap().replace_objects(&s.id, &objects).map_err(err)
     }
@@ -236,6 +242,7 @@ impl Pim {
                     .map_err(err)
             }
             Backend::Graph => Err("use the Graph event path".into()),
+            Backend::Ics => Err(format!("“{}” is a read-only subscription", s.name)),
         }
     }
 
@@ -250,6 +257,7 @@ impl Pim {
                 let token = self.graph_token(app, s.account_id.as_deref().unwrap_or("")).await?;
                 pim::graph::Client::new(&token).delete_event(href).await.map_err(err)?;
             }
+            Backend::Ics => return Err(format!("“{}” is a read-only subscription", s.name)),
         }
         self.store.lock().unwrap().delete_object(&s.id, href).map_err(err)
     }
@@ -303,7 +311,7 @@ pub fn remove_source(id: String, pim: State<SharedPim>, app: AppHandle) -> CmdRe
     let store = pim.store.lock().unwrap();
     store.remove_source(&id).map_err(err)?;
     // Forget the stored login once no source uses it.
-    if let (Some(login), Backend::Dav | Backend::Graph) = (&s.account_id, s.backend) {
+    if let (Some(login), Backend::Dav | Backend::Graph | Backend::Ics) = (&s.account_id, s.backend) {
         if !store.sources().map_err(err)?.iter().any(|o| o.account_id.as_ref() == Some(login)) {
             secrets::delete_named(&secret_name(login));
             secrets::delete_named(&format!("graph:{login}"));
@@ -475,6 +483,16 @@ pub enum CalendarAccount {
     Fastmail { username: String, password: String },
     Caldav { url: String, username: String, password: String, #[serde(default)] name: String },
     Microsoft,
+    /// A read-only calendar published at a URL (Google's secret iCal address).
+    Ics { url: String, #[serde(default)] name: String },
+}
+
+/// A subscribed feed as stored objects, one per event.
+fn feed_objects(feed: &str) -> Vec<StoredObject> {
+    pim::feed::split(feed)
+        .into_iter()
+        .map(|(uid, data)| StoredObject { href: format!("ics:{uid}"), etag: String::new(), uid, data })
+        .collect()
 }
 
 fn palette(i: usize) -> String {
@@ -557,6 +575,13 @@ pub async fn add_calendar_account(input: CalendarAccount, pim: State<'_, SharedP
                 (AuthMethod::OAuth2 { provider: OAuthProvider::Microsoft }, _) => {
                     return Err("Outlook calendars are added with “Microsoft 365 / Outlook.com”".into())
                 }
+                (_, mail_core::model::Provider::Gmail) => {
+                    return Err("Google Calendar only accepts “Sign in with Google”, not app passwords. Add a Google \
+                        OAuth client in Settings → Advanced, then remove this account and add it again with Google \
+                        sign-in to use its calendar. For a read-only view without that, use “Subscribe by \
+                        address (iCal)” with the calendar's secret address."
+                        .into())
+                }
                 _ => return Err("this account can't share its sign-in with a calendar; add the calendar server directly".into()),
             };
             let auth = pim.dav_auth(&app, &Source {
@@ -606,6 +631,37 @@ pub async fn add_calendar_account(input: CalendarAccount, pim: State<'_, SharedP
                 secrets::delete_named(&secret_name(&login));
             }
             res
+        }
+        CalendarAccount::Ics { url, name } => {
+            let url = pim::feed::http_url(&url).map_err(err)?;
+            let feed = pim::feed::fetch(&url).await.map_err(err)?;
+            let existing = pim.store.lock().unwrap().sources().map_err(err)?;
+            let name = Some(name.trim().to_string())
+                .filter(|n| !n.is_empty())
+                .or_else(|| pim::feed::name(&feed))
+                .or_else(|| url::Url::parse(&url).ok().and_then(|u| u.host_str().map(str::to_string)))
+                .unwrap_or_else(|| "Subscribed calendar".into());
+            secrets::store_named(&secret_name(&login), &url).map_err(err)?;
+            let s = Source {
+                id: format!("src-{}", uuid_like()),
+                kind: SourceKind::Calendar,
+                backend: Backend::Ics,
+                name,
+                color: palette(existing.len()),
+                // The address itself is a secret; it lives in the keyring.
+                url: format!("ics:{login}"),
+                account_id: Some(login.clone()),
+                username: None,
+                writable: false,
+                enabled: true,
+                events: true,
+                todos: false,
+                group: "Subscriptions".into(),
+            };
+            pim.store.lock().unwrap().save_source(&s).map_err(err)?;
+            pim.store.lock().unwrap().replace_objects(&s.id, &feed_objects(&feed)).map_err(err)?;
+            let _ = app.emit("pim-changed", ());
+            Ok(1)
         }
         CalendarAccount::Microsoft => {
             let client = engine.oauth_client(OAuthProvider::Microsoft);

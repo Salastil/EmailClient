@@ -190,7 +190,7 @@ export type MessageMenuAction =
   | 'save';
 
 export type SourceKind = 'calendar' | 'address_book';
-export type Backend = 'local' | 'dav' | 'dav_o_auth' | 'graph';
+export type Backend = 'local' | 'dav' | 'dav_o_auth' | 'graph' | 'ics';
 
 export interface Source {
   id: string;
@@ -261,4 +261,5 @@ export type CalendarAccountInput =
   | { kind: 'icloud'; username: string; password: string }
   | { kind: 'fastmail'; username: string; password: string }
   | { kind: 'caldav'; url: string; username: string; password: string; name: string }
-  | { kind: 'microsoft' };
+  | { kind: 'microsoft' }
+  | { kind: 'ics'; url: string; name: string };
