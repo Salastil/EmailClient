@@ -138,6 +138,7 @@
     </div>
   {:else if step === 'email'}
     <form class="form" onsubmit={(e) => { e.preventDefault(); discover(); }}>
+    <button type="submit" class="implicit-submit" tabindex="-1" aria-hidden="true"></button>
       <label>Your name, as shown to people you write to<input bind:value={senderName} placeholder="Jane Doe" /></label>
       <label>Email address<input type="email" bind:value={email} placeholder={`you@${tile?.domain || 'example.com'}`} /></label>
     </form>
@@ -153,6 +154,7 @@
       </div>
     {:else}
       <form class="form" onsubmit={(e) => { e.preventDefault(); connect(); }}>
+    <button type="submit" class="implicit-submit" tabindex="-1" aria-hidden="true"></button>
         <label>{found.proton ? 'Proton password' : 'Password'}<input type="password" bind:value={password} /></label>
         {#if found.proton}
           <label>Two-factor code (if enabled)<input inputmode="numeric" bind:value={totp} placeholder="123456" /></label>

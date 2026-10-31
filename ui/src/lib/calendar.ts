@@ -1,63 +1,4 @@
-// Calendar model and demo data until CalDAV sync (crates/pim) lands.
-
-export interface CalendarSource {
-  id: string;
-  name: string;
-  color: string;
-  readonly: boolean;
-  enabled: boolean;
-  kind: 'local' | 'google' | 'caldav' | 'microsoft';
-}
-
-export interface CalEvent {
-  id: string;
-  calendar: string;
-  title: string;
-  start: Date;
-  end: Date;
-  allDay: boolean;
-  reminder: boolean;
-}
-
-export interface Task {
-  id: string;
-  title: string;
-  done: boolean;
-  due?: Date;
-}
-
-export const calendars: CalendarSource[] = [
-  { id: 'home', name: 'Home', color: '#9aa1a9', readonly: false, enabled: true, kind: 'local' },
-  { id: 'google', name: 'you@gmail.com', color: '#7bd148', readonly: false, enabled: true, kind: 'google' },
-  { id: 'holidays', name: 'Holidays in United States', color: '#2ecc9a', readonly: true, enabled: true, kind: 'google' },
-  { id: 'nextcloud', name: 'Nextcloud', color: '#4dabf7', readonly: false, enabled: true, kind: 'caldav' },
-];
-
-function at(base: Date, dayOffset: number, h: number, m = 0): Date {
-  const d = new Date(base);
-  d.setDate(d.getDate() + dayOffset);
-  d.setHours(h, m, 0, 0);
-  return d;
-}
-
-/** Demo events placed relative to the current week so the view is never empty. */
-export function demoEvents(now = new Date()): CalEvent[] {
-  const sunday = new Date(now);
-  sunday.setDate(now.getDate() - now.getDay());
-  return [
-    { id: 'e1', calendar: 'google', title: 'Lawn cutting', start: at(sunday, 1, 0), end: at(sunday, 2, 0), allDay: true, reminder: true },
-    { id: 'e2', calendar: 'google', title: 'Nurse visit', start: at(sunday, 3, 12), end: at(sunday, 3, 13), allDay: false, reminder: true },
-    { id: 'e3', calendar: 'nextcloud', title: 'State Farm John', start: at(sunday, 5, 14, 30), end: at(sunday, 5, 15, 15), allDay: false, reminder: false },
-    { id: 'e4', calendar: 'holidays', title: 'Halloween', start: at(sunday, 6, 0), end: at(sunday, 7, 0), allDay: true, reminder: false },
-    { id: 'e5', calendar: 'home', title: 'Groceries', start: at(sunday, 2, 9), end: at(sunday, 2, 10), allDay: false, reminder: false },
-  ];
-}
-
-export const demoTasks: Task[] = [
-  { id: 't1', title: 'Pay rent', done: false },
-  { id: 't2', title: 'Call John about renewal', done: false },
-  { id: 't3', title: 'Renew domain', done: true },
-];
+// Date helpers for the planner.
 
 export function sameDay(a: Date, b: Date): boolean {
   return a.toDateString() === b.toDateString();
@@ -83,4 +24,38 @@ export function isoWeek(d: Date): number {
   t.setUTCDate(t.getUTCDate() + 4 - day);
   const yearStart = new Date(Date.UTC(t.getUTCFullYear(), 0, 1));
   return Math.ceil(((t.getTime() - yearStart.getTime()) / 86400000 + 1) / 7);
+}
+
+/** Whether an all-day event (stored as UTC midnights, end exclusive) covers a local day. */
+export function allDayCovers(startIso: string, endIso: string, day: Date): boolean {
+  const key = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
+  return new Date(startIso).getTime() <= key && key < new Date(endIso).getTime();
+}
+
+/** Assign side-by-side lanes to overlapping timed events of one day. */
+export function lanes<T extends { start: string; end: string }>(events: T[]): { ev: T; lane: number; lanes: number }[] {
+  const sorted = [...events].sort((a, b) => +new Date(a.start) - +new Date(b.start));
+  const out: { ev: T; lane: number; lanes: number }[] = [];
+  let group: { ev: T; lane: number; lanes: number }[] = [];
+  let groupEnd = 0;
+  const laneEnds: number[] = [];
+  const flush = () => {
+    const n = Math.max(1, ...group.map((g) => g.lane + 1));
+    group.forEach((g) => (g.lanes = n));
+    out.push(...group);
+    group = [];
+    laneEnds.length = 0;
+  };
+  for (const ev of sorted) {
+    const s = +new Date(ev.start);
+    const e = Math.max(+new Date(ev.end), s + 15 * 60000);
+    if (group.length && s >= groupEnd) flush();
+    let lane = laneEnds.findIndex((end) => end <= s);
+    if (lane === -1) lane = laneEnds.length;
+    laneEnds[lane] = e;
+    group.push({ ev, lane, lanes: 1 });
+    groupEnd = Math.max(groupEnd, e);
+  }
+  flush();
+  return out;
 }

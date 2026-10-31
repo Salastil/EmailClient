@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/core';
+import type { CalendarAccountInput, Contact, ContactItem, EventInput, Instance, Source, TaskItem } from './types';
 import type {
   Account, AccountConfig, Address, Discovered, Draft, Folder, MessageSummary, MessageView, NewAccount,
   NotifyMode, Settings, ThreadNode,
@@ -33,4 +34,25 @@ export const api = {
   setAccountNotify: (accountId: string, mode: NotifyMode) => invoke<void>('set_account_notify', { accountId, mode }),
   testNotification: (accountId: string) => invoke<boolean>('test_notification', { accountId }),
   quit: () => invoke<void>('quit'),
+};
+
+
+export const pim = {
+  sources: () => invoke<Source[]>('pim_sources'),
+  updateSource: (id: string, update: { enabled?: boolean; color?: string; name?: string }) =>
+    invoke<void>('update_source', { id, update }),
+  removeSource: (id: string) => invoke<void>('remove_source', { id }),
+  sync: () => invoke<void>('sync_calendars'),
+  events: (from: Date, to: Date) =>
+    invoke<Instance[]>('calendar_events', { from: from.toISOString(), to: to.toISOString() }),
+  tasks: () => invoke<TaskItem[]>('calendar_tasks'),
+  contacts: () => invoke<ContactItem[]>('contacts'),
+  saveEvent: (sourceId: string, href: string | null, uid: string | null, event: EventInput) =>
+    invoke<void>('save_event', { sourceId, href, uid, event }),
+  deleteObject: (sourceId: string, href: string) => invoke<void>('delete_pim_object', { sourceId, href }),
+  saveTask: (sourceId: string, summary: string, due: string | null) => invoke<void>('save_task', { sourceId, summary, due }),
+  setTaskDone: (sourceId: string, href: string, done: boolean) => invoke<void>('set_task_done', { sourceId, href, done }),
+  saveContact: (sourceId: string, href: string | null, uid: string | null, contact: Omit<Contact, 'uid'>) =>
+    invoke<void>('save_contact', { sourceId, href, uid, contact }),
+  addCalendarAccount: (input: CalendarAccountInput) => invoke<number>('add_calendar_account', { input }),
 };

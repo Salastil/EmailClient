@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 mail-core = { path = "../crates/mail-core" }
 providers = { path = "../crates/providers" }
+pim = { path = "../crates/pim" }
 tauri = { version = "2", features = ["image-png"] }
 tauri-plugin-notification = "2"
 tauri-plugin-opener = "2"
@@ -23,6 +24,7 @@ tauri-plugin-dialog = "2"
 tokio = { version = "1", features = ["sync", "time", "macros", "rt-multi-thread"] }
 notify-rust = "4"
 tracing = "0.1"
+url = "2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 ksni = { version = "0.3", features = ["blocking"] }
 serde.workspace = true

@@ -120,3 +120,12 @@ input, select, textarea {
   line-height: 18px;
   text-align: center;
 }
+
+/* Lets Enter submit dialog forms whose visible buttons live outside the form. */
+.implicit-submit {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}

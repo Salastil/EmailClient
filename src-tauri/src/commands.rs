@@ -591,8 +591,10 @@ pub fn update_account(account_id: String, update: AccountUpdate, engine: State<S
 }
 
 #[tauri::command]
-pub fn remove_account(account_id: String, engine: State<SharedEngine>) -> CmdResult<()> {
-    engine.remove_account(&account_id)
+pub fn remove_account(account_id: String, engine: State<SharedEngine>, app: AppHandle) -> CmdResult<()> {
+    engine.remove_account(&account_id)?;
+    crate::pim::forget_account(&app, &account_id);
+    Ok(())
 }
 
 #[tauri::command]

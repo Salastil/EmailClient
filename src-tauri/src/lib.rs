@@ -108,6 +108,19 @@ pub fn run() {
             commands::set_account_notify,
             commands::test_notification,
             commands::quit,
+            pim::pim_sources,
+            pim::update_source,
+            pim::remove_source,
+            pim::sync_calendars,
+            pim::calendar_events,
+            pim::calendar_tasks,
+            pim::contacts,
+            pim::save_event,
+            pim::delete_pim_object,
+            pim::save_task,
+            pim::set_task_done,
+            pim::save_contact,
+            pim::add_calendar_account,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Moho Mail");

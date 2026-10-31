@@ -4,6 +4,8 @@
   import AccountRail from './components/AccountRail.svelte';
   import AddAccount from './components/AddAccount.svelte';
   import CalendarView from './components/CalendarView.svelte';
+  import ContactDialog from './components/ContactDialog.svelte';
+  import ContactsView from './components/ContactsView.svelte';
   import Compose from './components/Compose.svelte';
   import Dialog from './components/Dialog.svelte';
   import FolderPane from './components/FolderPane.svelte';
@@ -12,10 +14,10 @@
   import Reader from './components/Reader.svelte';
   import SettingsPane from './components/SettingsPane.svelte';
   import Splitter from './components/Splitter.svelte';
-  import { api } from './lib/api';
+  import { api, pim } from './lib/api';
   import { displayName, longDate } from './lib/format';
   import type {
-    Account, ComposeInit, Folder, MessageAction, MessageSummary, MessageView, NotifyMode, Settings, ThreadNode,
+    Account, ComposeInit, Folder, MessageAction, MessageSummary, MessageView, NotifyMode, Settings, Source, ThreadNode,
   } from './lib/types';
 
   let accounts = $state<Account[]>([]);
@@ -28,9 +30,11 @@
   let message = $state<MessageView | null>(null);
   let loadingMessage = $state(false);
   let settings = $state<Settings | null>(null);
-  let view = $state<'mail' | 'calendar'>('mail');
+  let view = $state<'mail' | 'calendar' | 'contacts'>('mail');
+  let newEventSignal = $state(0);
+  let pimSources = $state<Source[]>([]);
   let settingsOpen = $state(false);
-  let dialog = $state<null | 'account' | 'contact' | 'event' | 'reauth'>(null);
+  let dialog = $state<null | 'account' | 'contact' | 'reauth'>(null);
   let compose = $state<ComposeInit | null>(null);
   let toast = $state<{ text: string; error?: boolean } | null>(null);
   let query = $state('');
@@ -297,6 +301,18 @@
     }
   }
 
+  async function addSomething(what: 'account' | 'contact' | 'event') {
+    if (what === 'event') {
+      view = 'calendar';
+      newEventSignal++;
+    } else if (what === 'contact') {
+      pimSources = (await guard(pim.sources())) ?? [];
+      dialog = 'contact';
+    } else {
+      dialog = 'account';
+    }
+  }
+
   async function accountAdded(a: Account) {
     dialog = null;
     await refreshAccounts();
@@ -382,13 +398,16 @@
       {view}
       onselect={selectAccount}
       oncalendar={() => (view = view === 'calendar' ? 'mail' : 'calendar')}
+      oncontacts={() => (view = view === 'contacts' ? 'mail' : 'contacts')}
       onsettings={() => (settingsOpen = true)}
-      onadd={(what) => (dialog = what)}
+      onadd={addSomething}
       onnotify={setNotify}
     />
 
     {#if view === 'calendar'}
-      <CalendarView onnewevent={() => (dialog = 'event')} />
+      <CalendarView {accounts} {newEventSignal} />
+    {:else if view === 'contacts'}
+      <ContactsView oncompose={(to) => (compose = { account_id: accountId, to })} />
     {:else if !accounts.length}
       <div class="welcome">
         <Icon name="forum" size={64} fill />
@@ -468,13 +487,7 @@
     {/snippet}
   </Dialog>
 {:else if dialog === 'contact'}
-  <Dialog title="New contact" onclose={() => (dialog = null)}>
-    <p class="todo">Contacts sync with CardDAV (Google, Nextcloud, Fastmail) in milestone 5.</p>
-  </Dialog>
-{:else if dialog === 'event'}
-  <Dialog title="New event" onclose={() => (dialog = null)}>
-    <p class="todo">Event editing syncs with CalDAV (Google, Nextcloud and others) in milestone 5.</p>
-  </Dialog>
+  <ContactDialog sources={pimSources} onclose={() => (dialog = null)} />
 {/if}
 
 {#if compose}
@@ -516,7 +529,6 @@
   }
   .snackbar.error { background: #ffdad6; color: #410002; }
   .snackbar .icon-btn { color: inherit; }
-  .todo { color: var(--md-sys-color-on-surface-variant); }
   .reauth { display: flex; flex-direction: column; gap: 10px; }
   .reauth p { margin: 0; font-size: 13px; color: var(--md-sys-color-on-surface-variant); }
   .reauth input {

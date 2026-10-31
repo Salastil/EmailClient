@@ -9,15 +9,17 @@
     view,
     onselect,
     oncalendar,
+    oncontacts,
     onsettings,
     onadd,
     onnotify,
   }: {
     accounts: Account[];
     selected: string | null;
-    view: 'mail' | 'calendar';
+    view: 'mail' | 'calendar' | 'contacts';
     onselect: (id: string) => void;
     oncalendar: () => void;
+    oncontacts: () => void;
     onsettings: () => void;
     onadd: (what: 'account' | 'contact' | 'event') => void;
     onnotify: (id: string, mode: NotifyMode) => void;
@@ -101,6 +103,12 @@
       <span class="pill"></span>
       <button class="tool" title="Calendar" aria-pressed={view === 'calendar'} onclick={oncalendar}>
         <Icon name="calendar_month" size={24} fill={view === 'calendar'} />
+      </button>
+    </div>
+    <div class="slot" class:active={view === 'contacts'}>
+      <span class="pill"></span>
+      <button class="tool" title="Contacts" aria-pressed={view === 'contacts'} onclick={oncontacts}>
+        <Icon name="contacts" size={24} fill={view === 'contacts'} />
       </button>
     </div>
     <button class="tool" title="Settings" onclick={onsettings}>

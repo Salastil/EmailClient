@@ -173,3 +173,77 @@ export interface ComposeInit {
 }
 
 export type MessageAction = 'reply' | 'reply_all' | 'forward' | 'archive' | 'delete' | 'toggle_read' | 'toggle_star';
+
+export type SourceKind = 'calendar' | 'address_book';
+export type Backend = 'local' | 'dav' | 'dav_o_auth' | 'graph';
+
+export interface Source {
+  id: string;
+  kind: SourceKind;
+  backend: Backend;
+  name: string;
+  color: string;
+  url: string;
+  account_id: string | null;
+  username: string | null;
+  writable: boolean;
+  enabled: boolean;
+  events: boolean;
+  todos: boolean;
+  group: string;
+}
+
+export interface Instance {
+  source_id: string;
+  href: string;
+  uid: string;
+  summary: string;
+  description: string;
+  location: string;
+  start: string;
+  end: string;
+  all_day: boolean;
+  alarm_minutes: number | null;
+  recurring: boolean;
+}
+
+export interface TaskItem {
+  source_id: string;
+  href: string;
+  uid: string;
+  summary: string;
+  due: string | null;
+  completed: boolean;
+}
+
+export interface Contact {
+  uid: string;
+  name: string;
+  emails: string[];
+  phones: string[];
+  organization: string;
+  note: string;
+}
+
+export interface ContactItem extends Contact {
+  source_id: string;
+  href: string;
+}
+
+export interface EventInput {
+  summary: string;
+  description: string;
+  location: string;
+  start: string;
+  end: string;
+  all_day: boolean;
+  alarm_minutes: number | null;
+}
+
+export type CalendarAccountInput =
+  | { kind: 'mail_account'; account_id: string }
+  | { kind: 'nextcloud'; server: string }
+  | { kind: 'icloud'; username: string; password: string }
+  | { kind: 'fastmail'; username: string; password: string }
+  | { kind: 'caldav'; url: string; username: string; password: string; name: string }
+  | { kind: 'microsoft' };
