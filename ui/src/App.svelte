@@ -114,6 +114,12 @@
     threads = (await guard(api.listThreads(folderId))) ?? [];
   }
 
+  /** Calendar or contacts from the rail: toggles back to mail, or leaves Settings. */
+  function show(next: 'calendar' | 'contacts') {
+    view = view === next && !settingsOpen ? 'mail' : next;
+    settingsOpen = false;
+  }
+
   async function selectAccount(id: string) {
     view = 'mail';
     searchResults = null;
@@ -514,16 +520,26 @@
     <AccountRail
       {accounts}
       selected={accountId}
-      {view}
-      onselect={selectAccount}
-      oncalendar={() => (view = view === 'calendar' ? 'mail' : 'calendar')}
-      oncontacts={() => (view = view === 'contacts' ? 'mail' : 'contacts')}
-      onsettings={() => (settingsOpen = true)}
+      view={settingsOpen ? 'settings' : view}
+      onselect={(id) => { settingsOpen = false; selectAccount(id); }}
+      oncalendar={() => show('calendar')}
+      oncontacts={() => show('contacts')}
+      onsettings={() => (settingsOpen = !settingsOpen)}
       onadd={addSomething}
       onnotify={setNotify}
     />
 
-    {#if view === 'calendar'}
+    {#if settingsOpen && settings}
+      <SettingsPane
+        {settings}
+        {accounts}
+        onchange={saveSettings}
+        onnotify={setNotify}
+        ontest={(id) => api.testNotification(id)}
+        onaccountschanged={refreshAccounts}
+        onclose={() => (settingsOpen = false)}
+      />
+    {:else if view === 'calendar'}
       <CalendarView {accounts} {newEventSignal} />
     {:else if view === 'contacts'}
       <ContactsView oncompose={(to) => (compose = { account_id: accountId, to })} />
@@ -587,17 +603,6 @@
   {/if}
 </div>
 
-{#if settingsOpen && settings}
-  <SettingsPane
-    {settings}
-    {accounts}
-    onchange={saveSettings}
-    onnotify={setNotify}
-    ontest={(id) => api.testNotification(id)}
-    onaccountschanged={refreshAccounts}
-    onclose={() => (settingsOpen = false)}
-  />
-{/if}
 
 {#if dialog === 'account'}
   <AddAccount onclose={() => (dialog = null)} onadded={accountAdded} />

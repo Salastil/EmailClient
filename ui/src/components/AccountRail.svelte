@@ -16,7 +16,7 @@
   }: {
     accounts: Account[];
     selected: string | null;
-    view: 'mail' | 'calendar' | 'contacts';
+    view: 'mail' | 'calendar' | 'contacts' | 'settings';
     onselect: (id: string) => void;
     oncalendar: () => void;
     oncontacts: () => void;
@@ -111,9 +111,12 @@
         <Icon name="contacts" size={24} fill={view === 'contacts'} />
       </button>
     </div>
-    <button class="tool" title="Settings" onclick={onsettings}>
-      <Icon name="settings" size={24} />
-    </button>
+    <div class="slot" class:active={view === 'settings'}>
+      <span class="pill"></span>
+      <button class="tool" title="Settings" aria-pressed={view === 'settings'} onclick={onsettings}>
+        <Icon name="settings" size={24} fill={view === 'settings'} />
+      </button>
+    </div>
   </div>
 </nav>
 

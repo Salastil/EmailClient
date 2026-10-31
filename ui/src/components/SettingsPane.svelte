@@ -141,7 +141,7 @@
 
 <svelte:window onkeydown={(e) => e.key === 'Escape' && onclose()} />
 
-<div class="settings" role="dialog" aria-modal="true" aria-label="Settings">
+<div class="settings" role="region" aria-label="Settings">
   <nav>
     <div class="nav-title">Settings</div>
     {#each nav as n}
@@ -375,10 +375,11 @@
 </div>
 
 <style>
+  /* Fills the main area beside the account rail, like the calendar. */
   .settings {
-    position: fixed;
-    inset: 0;
-    z-index: 40;
+    position: relative;
+    flex: 1;
+    min-width: 0;
     display: flex;
     background: var(--md-sys-color-surface);
     user-select: text;
@@ -396,7 +397,7 @@
   nav button:hover { background: var(--md-sys-state-hover); }
   nav button.on { background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container); font-weight: 600; }
   .body { position: relative; flex: 1; overflow-y: auto; padding: 48px 56px; max-width: 900px; }
-  .close { position: fixed; top: 20px; right: 24px; width: 40px; height: 40px; border: 1px solid var(--md-sys-color-outline); }
+  .close { position: absolute; top: 20px; right: 24px; width: 40px; height: 40px; border: 1px solid var(--md-sys-color-outline); }
   h2 { margin: 0 0 20px; font-size: 22px; font-weight: 600; }
   h3 { margin: 28px 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--md-sys-color-on-surface-variant); }
   .card { background: var(--md-sys-color-surface-container); border-radius: var(--md-sys-shape-corner-large); padding: 8px 16px; margin-bottom: 10px; }
